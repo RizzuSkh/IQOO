@@ -4,7 +4,7 @@
 **Principle:** READ → STRUCTURE → COMPARE → REPORT
 
 ---
-
+                                                                                
 ## 1. Executive summary
 
 Parity is an offline Android application that verifies a physical assembly against its

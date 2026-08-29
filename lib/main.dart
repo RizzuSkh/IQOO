@@ -1,246 +1,133 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
+import 'screens/capture_screen.dart';
 
-import 'logic/compare.dart';
-import 'logic/ocr.dart';
-import 'logic/parser.dart';
-import 'logic/phrase.dart';
-import 'models/spec_item.dart';
+void main() {
+  runApp(const ParityApp());
+}
 
-/// DEBUG HARNESS — NOT THE PRODUCT UI.
-///
-/// This screen exists to prove the pipeline is wired end to end:
-/// camera -> ocr -> parser -> compare -> phrase -> text.
-///
-/// The real capture, review, and results screens live in lib/screens/ and are
-/// owned by Laptop 2 and Laptop 3. This file is replaced when they land.
-
-void main() => runApp(const ParityDebugApp());
-
-/// Root of the debug harness.
-class ParityDebugApp extends StatelessWidget {
-  /// Creates the harness app.
-  const ParityDebugApp({super.key});
+class ParityApp extends StatelessWidget {
+  const ParityApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Parity (debug harness)',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
-      home: const PipelineHarness(),
+      title: 'Parity',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+      ),
+      home: const HomeScreen(),
     );
   }
 }
 
-/// Captures two photographs and runs the full pipeline over them.
-class PipelineHarness extends StatefulWidget {
-  /// Creates the harness screen.
-  const PipelineHarness({super.key});
-
-  @override
-  State<PipelineHarness> createState() => _PipelineHarnessState();
-}
-
-class _PipelineHarnessState extends State<PipelineHarness> {
-  /// Reference spec image read by [_readPushedImages].
-  static const String _specFile = 'parity_spec.png';
-
-  /// Reference assembly image read by [_readPushedImages].
-  static const String _assemblyFile = 'parity_assembly.png';
-
-  final ImagePicker _picker = ImagePicker();
-  final OcrReader _ocr = OcrReader();
-
-  ParseResult? _spec;
-  ParseResult? _assembly;
-  String _status = 'Capture the specification, then the assembly.';
-  bool _busy = false;
-
-  @override
-  void dispose() {
-    _ocr.close();
-    super.dispose();
-  }
-
-  /// Photographs one side, runs OCR and the parser, and stores the result.
-  Future<void> _capture({required bool isSpec}) async {
-    final label = isSpec ? 'specification' : 'assembly';
-    setState(() {
-      _busy = true;
-      _status = 'Opening camera for the $label...';
-    });
-
-    try {
-      final photo = await _picker.pickImage(source: ImageSource.camera);
-      if (photo == null) {
-        _set('Capture cancelled.');
-        return;
-      }
-
-      _set('Reading the $label...');
-      final blocks = await _ocr.readBlocks(photo.path);
-      final parsed = parseBlocks(blocks);
-
-      if (!mounted) return;
-      setState(() {
-        if (isSpec) {
-          _spec = parsed;
-        } else {
-          _assembly = parsed;
-        }
-        _busy = false;
-        _status =
-            '${blocks.length} blocks read, ${parsed.items.length} rows '
-            'parsed from the $label.';
-      });
-    } on OcrException catch (error) {
-      _set('OCR failed: ${error.message}');
-    } catch (error) {
-      _set('Capture failed: $error');
-    }
-  }
-
-  /// Runs the pipeline over two reference PNGs pushed to the documents directory.
-  ///
-  /// Device-verification aid, not a product feature. The camera path above is
-  /// the real one, but it needs a human to aim the phone, so its result is
-  /// never the same twice. This reads `parity_spec.png` and
-  /// `parity_assembly.png` from the app documents directory instead, which
-  /// makes the expected [DiffResult] deterministic and lets ML Kit be checked
-  /// on the actual device against a known answer.
-  ///
-  /// The files go in the app's own documents directory precisely so that no
-  /// storage permission is needed — CAMERA stays the only permission (NFR5).
-  /// Push them with:
-  /// `adb push parity_spec.png /data/local/tmp/ && adb shell run-as
-  /// com.rtiparadox.parity.parity cp /data/local/tmp/parity_spec.png
-  /// app_flutter/`
-  ///
-  /// Deleted along with the rest of this harness when the real screens land.
-  Future<void> _readPushedImages() async {
-    setState(() {
-      _busy = true;
-      _status = 'Reading pushed reference images...';
-    });
-
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final specBlocks = await _ocr.readBlocks('${directory.path}/$_specFile');
-      final assemblyBlocks = await _ocr.readBlocks(
-        '${directory.path}/$_assemblyFile',
-      );
-
-      final spec = parseBlocks(specBlocks);
-      final assembly = parseBlocks(assemblyBlocks);
-
-      if (!mounted) return;
-      setState(() {
-        _spec = spec;
-        _assembly = assembly;
-        _busy = false;
-        _status =
-            'Reference images: ${specBlocks.length} spec blocks, '
-            '${assemblyBlocks.length} assembly blocks.';
-      });
-    } on OcrException catch (error) {
-      _set('OCR failed: ${error.message}');
-    } catch (error) {
-      _set('Reference read failed: $error');
-    }
-  }
-
-  /// Updates the status line and clears the busy flag.
-  void _set(String message) {
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _status = message;
-    });
-  }
-
-  /// Clears both captures (F10 reset, proven here in miniature).
-  void _reset() {
-    setState(() {
-      _spec = null;
-      _assembly = null;
-      _status = 'Reset. Capture the specification, then the assembly.';
-    });
-  }
-
-  /// The comparison summary, or null until both sides are captured.
-  String? get _summary {
-    final spec = _spec;
-    final assembly = _assembly;
-    if (spec == null || assembly == null) return null;
-    return phraseWithRules(compare(spec.items, assembly.items));
-  }
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final summary = _summary;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Parity — debug harness')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+      appBar: AppBar(
+        title: const Text('Parity'),
+        centerTitle: true,
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            FilledButton(
-              onPressed: _busy ? null : () => _capture(isSpec: true),
-              child: const Text('Capture Spec'),
+            // Logo/Icon
+            Icon(
+              Icons.compare_arrows,
+              size: 80,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 24),
+
+            // Title
+            const Text(
+              'Assembly Verification',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            FilledButton(
-              onPressed: _busy ? null : () => _capture(isSpec: false),
-              child: const Text('Capture Assembly'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: _busy ? null : _readPushedImages,
-              child: const Text('Read Reference Images'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: _busy ? null : _reset,
-              child: const Text('Reset'),
-            ),
-            const SizedBox(height: 16),
-            Text(_status, style: Theme.of(context).textTheme.bodyMedium),
-            const Divider(height: 32),
-            _extraction('Specification', _spec),
-            _extraction('Assembly', _assembly),
-            const Divider(height: 32),
+
+            // Subtitle
             Text(
-              summary ?? 'Waiting for both captures.',
-              style: Theme.of(context).textTheme.titleMedium,
+              'Compare physical assembly to specification',
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 48),
+
+            // Start button
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CaptureScreen(mode: CaptureMode.spec),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.camera_alt),
+              label: const Text('Start Verification'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                textStyle: const TextStyle(fontSize: 18),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Info cards
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.offline_bolt, color: Colors.green),
+                        SizedBox(width: 8),
+                        Text('Fully Offline', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'All OCR and comparison happens on device. No internet required.',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.speed, color: Colors.blue),
+                        SizedBox(width: 8),
+                        Text('Fast Results', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Two photos, instant comparison. Reports what differs only.',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  /// Shows what was extracted from one photograph, including unparsed rows.
-  Widget _extraction(String title, ParseResult? parsed) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
-          if (parsed == null)
-            const Text('not captured')
-          else ...[
-            for (final SpecItem item in parsed.items)
-              Text(
-                '${item.position}: '
-                '${item.component.isEmpty ? "(unread)" : item.component}',
-              ),
-            for (final row in parsed.unparsedRows) Text('unparsed: $row'),
-          ],
-        ],
       ),
     );
   }
