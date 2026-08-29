@@ -25,9 +25,7 @@ void main() {
         const SpecItem(position: 'P1', component: 'NE555'),
         const SpecItem(position: 'P2', component: 'LM358'),
       ];
-      final assembly = [
-        const SpecItem(position: 'P1', component: 'NE555'),
-      ];
+      final assembly = [const SpecItem(position: 'P1', component: 'NE555')];
 
       final result = compare(spec, assembly);
       expect(result.isMatch, false);
@@ -38,9 +36,7 @@ void main() {
     });
 
     test('Unexpected component detected', () {
-      final spec = [
-        const SpecItem(position: 'P1', component: 'NE555'),
-      ];
+      final spec = [const SpecItem(position: 'P1', component: 'NE555')];
       final assembly = [
         const SpecItem(position: 'P1', component: 'NE555'),
         const SpecItem(position: 'P2', component: 'LM358'),
@@ -55,12 +51,8 @@ void main() {
     });
 
     test('Mismatched component detected', () {
-      final spec = [
-        const SpecItem(position: 'P1', component: 'NE555'),
-      ];
-      final assembly = [
-        const SpecItem(position: 'P1', component: 'LM358'),
-      ];
+      final spec = [const SpecItem(position: 'P1', component: 'NE555')];
+      final assembly = [const SpecItem(position: 'P1', component: 'LM358')];
 
       final result = compare(spec, assembly);
       expect(result.isMatch, false);
@@ -72,12 +64,8 @@ void main() {
     });
 
     test('Unread component detected', () {
-      final spec = [
-        const SpecItem(position: 'P1', component: 'NE555'),
-      ];
-      final assembly = [
-        const SpecItem(position: 'P1', component: ''),
-      ];
+      final spec = [const SpecItem(position: 'P1', component: 'NE555')];
+      final assembly = [const SpecItem(position: 'P1', component: '')];
 
       final result = compare(spec, assembly);
       expect(result.isMatch, false);
@@ -87,12 +75,8 @@ void main() {
     });
 
     test('Case-insensitive matching', () {
-      final spec = [
-        const SpecItem(position: 'p1', component: 'ne555'),
-      ];
-      final assembly = [
-        const SpecItem(position: 'p1', component: 'NE555'),
-      ];
+      final spec = [const SpecItem(position: 'p1', component: 'ne555')];
+      final assembly = [const SpecItem(position: 'p1', component: 'NE555')];
 
       final result = compare(spec, assembly);
       expect(result.isMatch, true);

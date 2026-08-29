@@ -29,8 +29,23 @@ class ParseResult {
   /// Raw text of rows whose leftmost block is not a position label.
   final List<String> unparsedRows;
 
+  /// Text ML Kit found sharing a row with a real item, past the component,
+  /// that was NOT folded into that item's component text.
+  ///
+  /// A real breadboard carries incidental text at the same height as a label —
+  /// column numbers, resistor colour codes, part date codes — and none of it
+  /// belongs in the component field. Surfacing it here (rather than silently
+  /// discarding it, and rather than the old behaviour of appending it to the
+  /// component) lets the capture screen tell the operator "N extra blocks
+  /// ignored" instead of shipping a corrupted component string.
+  final List<String> ignoredNoise;
+
   /// Creates a parse result.
-  const ParseResult({required this.items, required this.unparsedRows});
+  const ParseResult({
+    required this.items,
+    required this.unparsedRows,
+    this.ignoredNoise = const [],
+  });
 
   /// True when no row could be read as a position.
   bool get isEmpty => items.isEmpty;
@@ -40,7 +55,8 @@ class ParseResult {
 
   @override
   String toString() =>
-      'ParseResult(${items.length} items, ${unparsedRows.length} unparsed)';
+      'ParseResult(${items.length} items, ${unparsedRows.length} unparsed, '
+      '${ignoredNoise.length} noise)';
 }
 
 /// Parses OCR [blocks] into spec items by their positions on the page.
@@ -50,8 +66,12 @@ class ParseResult {
 /// `position, component`. A row with only a position yields an empty component,
 /// which downstream is reported as unread and never as a match.
 ///
-/// Where a row holds more than two blocks the extra blocks are appended to the
-/// component separated by spaces, so nothing recognised is silently discarded.
+/// A row holding more than two blocks takes only the second as the component;
+/// anything past that is incidental text sharing the row's height (a breadboard
+/// column number, a resistor colour code, a chip date code) and is reported in
+/// [ParseResult.ignoredNoise] rather than appended to the component. Appending
+/// it used to silently corrupt the component string — this is why "unwanted
+/// things" showed up in extracted components on real photographs.
 ParseResult parseBlocks(List<OcrBlock> blocks) {
   final usable = blocks
       .where((block) => _flatten(block.text).isNotEmpty)
@@ -62,6 +82,7 @@ ParseResult parseBlocks(List<OcrBlock> blocks) {
 
   final items = <SpecItem>[];
   final unparsedRows = <String>[];
+  final ignoredNoise = <String>[];
 
   for (final row in groupIntoRows(usable)) {
     row.sort((a, b) => a.left.compareTo(b.left));
@@ -72,22 +93,25 @@ ParseResult parseBlocks(List<OcrBlock> blocks) {
       continue;
     }
 
-    final component = row
-        .skip(1)
-        .map((block) => _flatten(block.text))
-        .join(' ')
-        .trim();
+    final component = row.length > 1 ? _flatten(row[1].text) : '';
+    if (row.length > 2) {
+      ignoredNoise.addAll(row.skip(2).map((block) => _flatten(block.text)));
+    }
 
     items.add(
       SpecItem(
         position: label,
         component: component,
-        confidence: _meanConfidence(row),
+        confidence: _meanConfidence(row.take(2)),
       ),
     );
   }
 
-  return ParseResult(items: items, unparsedRows: unparsedRows);
+  return ParseResult(
+    items: items,
+    unparsedRows: unparsedRows,
+    ignoredNoise: ignoredNoise,
+  );
 }
 
 /// Groups [blocks] into rows by Y-centre, top to bottom.
@@ -143,6 +167,9 @@ String? _asPosition(String text) {
 /// Collapses newlines and repeated spaces so block text is a single line.
 String _flatten(String text) => text.replaceAll(_whitespaceRun, ' ').trim();
 
-/// Mean OCR confidence across the blocks in a row.
-double _meanConfidence(List<OcrBlock> row) =>
-    row.map((block) => block.confidence).reduce((a, b) => a + b) / row.length;
+/// Mean OCR confidence across [row]. Ignored-noise blocks are excluded by the
+/// caller, so this reflects only the position and component that were kept.
+double _meanConfidence(Iterable<OcrBlock> row) {
+  final confidences = row.map((block) => block.confidence).toList();
+  return confidences.reduce((a, b) => a + b) / confidences.length;
+}

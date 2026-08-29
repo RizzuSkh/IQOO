@@ -40,7 +40,9 @@ Future<String> generateReport({
   } else {
     for (final d in result.all) {
       final typeStr = d.type.name.toUpperCase();
-      buffer.writeln('[$typeStr] ${d.position}: expected="${d.expected ?? "N/A"}", found="${d.found ?? "N/A"}"');
+      buffer.writeln(
+        '[$typeStr] ${d.position}: expected="${d.expected ?? "N/A"}", found="${d.found ?? "N/A"}"',
+      );
     }
   }
 

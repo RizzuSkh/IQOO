@@ -51,7 +51,9 @@ class ResultsScreen extends StatelessWidget {
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Report saved and copied to clipboard:\n$summary')),
+        SnackBar(
+          content: Text('Report saved and copied to clipboard:\n$summary'),
+        ),
       );
     }
   }
@@ -89,7 +91,9 @@ class ResultsScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: result.isMatch ? Colors.green.shade900 : Colors.red.shade900,
+                    color: result.isMatch
+                        ? Colors.green.shade900
+                        : Colors.red.shade900,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -117,9 +121,12 @@ class ResultsScreen extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final d = result.all[index];
                       return Card(
-                        color: _getColor(d.type).withOpacity(0.1),
+                        color: _getColor(d.type).withValues(alpha: 0.1),
                         child: ListTile(
-                          leading: Icon(_getIcon(d.type), color: _getColor(d.type)),
+                          leading: Icon(
+                            _getIcon(d.type),
+                            color: _getColor(d.type),
+                          ),
                           title: Text(
                             d.position,
                             style: const TextStyle(fontWeight: FontWeight.bold),
@@ -128,7 +135,8 @@ class ResultsScreen extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Type: ${d.type.name.toUpperCase()}'),
-                              if (d.expected != null) Text('Expected: ${d.expected}'),
+                              if (d.expected != null)
+                                Text('Expected: ${d.expected}'),
                               if (d.found != null) Text('Found: ${d.found}'),
                             ],
                           ),
@@ -154,10 +162,14 @@ class ResultsScreen extends StatelessWidget {
                 const SizedBox(width: 16),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).popUntil((route) => route.isFirst),
                     icon: const Icon(Icons.refresh),
                     label: const Text('New Check'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                    ),
                   ),
                 ),
               ],

@@ -69,7 +69,8 @@ class HomeScreen extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const CaptureScreen(mode: CaptureMode.spec),
+                    builder: (context) =>
+                        const CaptureScreen(mode: CaptureMode.spec),
                   ),
                 );
               },
@@ -92,7 +93,10 @@ class HomeScreen extends StatelessWidget {
                       children: [
                         Icon(Icons.offline_bolt, color: Colors.green),
                         SizedBox(width: 8),
-                        Text('Fully Offline', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text(
+                          'Fully Offline',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -114,7 +118,10 @@ class HomeScreen extends StatelessWidget {
                       children: [
                         Icon(Icons.speed, color: Colors.blue),
                         SizedBox(width: 8),
-                        Text('Fast Results', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text(
+                          'Fast Results',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),

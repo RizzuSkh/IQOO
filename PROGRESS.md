@@ -477,3 +477,74 @@ fails `^P\d+$` and lands in `unparsedRows` — nothing is lost, but nothing pair
 either. Widen the column gap first. If it still merges on real photographs, that
 is a `lib/logic/parser.dart` change and therefore Laptop 1's to make; report it
 rather than patching locally.
+
+## Session 3 — Laptop 1, root-caused and fixed "OCR picks up unwanted things"
+
+Audited GitHub first per user request (see chat log for full write-up); nothing
+was lost — Laptop 2/3's teammate (`Talha-Khan-47`) had pushed a complete P0 UI
+(`capture_screen.dart`, `review_extraction_screen.dart`, `results_screen.dart`,
+`report.dart`, and a rewritten `main.dart`) in commits `6792bf5`/`f4929b1`.
+Local `main` was 2 commits behind and fast-forwarded cleanly — no conflicts.
+
+**Root cause found for "random values" / "picks up unwanted things":** not an
+OCR model problem (ML Kit's on-device model is fixed and cannot be trained or
+fine-tuned — there is no dataset or training step available). Two real code
+bugs plus a controllable input problem:
+
+1. `lib/logic/parser.dart` appended every block sharing a row's height onto
+   the component string. A real breadboard has plenty of incidental text at
+   label height — column numbers, resistor colour codes, date codes — and all
+   of it was getting glued onto the real component name. **Fixed:** only the
+   second block in a row becomes the component; anything past that goes into
+   a new `ParseResult.ignoredNoise` list instead of corrupting the text.
+2. `capture_screen.dart` ran OCR over the entire photo with no way to exclude
+   anything outside the label region. **Fixed:** added a crop step between
+   capture and OCR — symmetric horizontal/vertical trim sliders with a live
+   masked preview, a "Scan Selected Area" button, and a "Use Full Photo"
+   fallback so the old behaviour is still reachable if cropping misbehaves.
+   Implemented in `lib/logic/image_crop.dart` using only `dart:ui` (image
+   decode + `Canvas.drawImageRect` + PNG re-encode) — no new dependency.
+3. `review_extraction_screen.dart` had no way to delete a bad row or add a
+   missed one — F9 was edit-only. **Fixed:** added delete per row, an add-row
+   dialog per section, and an expandable diagnostics panel showing
+   `unparsedRows` and `ignoredNoise` (previously computed but discarded after
+   capture, never shown to the operator) with a one-tap "Add" to promote a
+   stray row into a real item.
+
+Files touched: `lib/logic/parser.dart`, `lib/logic/image_crop.dart` (new),
+`lib/screens/capture_screen.dart`, `lib/screens/review_extraction_screen.dart`,
+`lib/screens/results_screen.dart` (deprecation fix only), `test/parser_test.dart`,
+`test/image_crop_test.dart` (new).
+
+**This crosses the file-ownership lines in CLAUDE.md/HANDOFF.md** — capture
+and review screens are Laptop 2's files. Done at the repo owner's explicit
+request this session ("do whatever changes are good"); flag it to Laptop 2 so
+they know why their files changed under them and can review.
+
+Check run: `flutter analyze` — "No issues found!" (0 issues, including the two
+pre-existing `withOpacity` deprecation warnings, fixed in passing).
+`flutter test` — **43/43 passed** (38 existing + 5 new in `image_crop_test.dart`
+covering the actual pixel-crop math).
+**NOT run on-device this session** — analyze/test only, no `flutter build` or
+`flutter run`, per instruction to avoid long tasks. The crop UI's math
+(fractional insets avoid needing screen-to-image pixel mapping) is sound but
+**unverified on a real camera photo**. Next session must run it on the iQOO.
+
+**Demo images added** — `demo_assets/`: three 1920×1080 landscape PNGs
+(`demo_spec_A`, `demo_assembly_A_match`, `demo_assembly_B_tampered`) generated
+locally with a known exact answer, meant to be displayed full-screen on the
+laptop and photographed with the phone — not loaded into the app directly, and
+explicitly recommended over any web-sourced image (arbitrary fonts, watermarks,
+compression noise all hurt OCR consistency, and a strange image can't be
+rehearsed against twice). `demo_assets/README.md` has the full run-through and
+expected results for both scenarios. `demo_assets/generate_demo_screens.ps1`
+regenerates them.
+
+**C: drive is no longer full** — confirmed ~70GB free (was 2MB in Session 2).
+The D:-redirect workaround in HANDOFF.md is no longer required, though still
+harmless to use.
+
+**Still true from HANDOFF.md, unchanged by this session:**
+- Nobody has run OCR against a real camera photograph yet — still the #1 risk.
+- Release APK permission strip still unverified (`aapt dump permissions`).
+- NFR1/NFR2/NFR3/NFR6 all still outstanding, all need a device.

@@ -127,13 +127,37 @@ void main() {
       expect(result.needsCorrection, isTrue);
     });
 
-    test('extra blocks in a row are appended, not discarded', () {
+    test('a third block in a row is ignored as noise, not appended', () {
+      // A real breadboard puts incidental text (column numbers, colour codes)
+      // at the same row height as a real label. It must not corrupt the
+      // component field the way appending it used to.
       final result = parseBlocks([
         block('P1', 60, 100),
         block('NE555', 200, 100),
         block('(DIP8)', 340, 100),
       ]);
-      expect(result.items.single.component, 'NE555 (DIP8)');
+      expect(result.items.single.component, 'NE555');
+      expect(result.ignoredNoise, ['(DIP8)']);
+    });
+
+    test('multiple stray blocks in one row are all reported as noise', () {
+      final result = parseBlocks([
+        block('P1', 60, 100),
+        block('NE555', 200, 100),
+        block('12', 340, 100),
+        block('J7', 420, 100),
+      ]);
+      expect(result.items.single.component, 'NE555');
+      expect(result.ignoredNoise, ['12', 'J7']);
+    });
+
+    test('noise on one row does not affect confidence of another row', () {
+      final result = parseBlocks([
+        block('P1', 60, 100, confidence: 1.0),
+        block('NE555', 200, 100, confidence: 1.0),
+        block('noise', 340, 100, confidence: 0.1),
+      ]);
+      expect(result.items.single.confidence, 1.0);
     });
 
     test('trailing punctuation on a label is tolerated', () {
