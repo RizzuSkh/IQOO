@@ -162,3 +162,91 @@ Notes:
   Someone must point this at a printed label and confirm blocks come back.
   That is the single most important unverified thing in the project.
 
+## Stage 7b — Release permission audit (unplanned, found during Stage 7)
+Status: see result below
+Files touched: android/app/src/release/AndroidManifest.xml (new)
+Why this exists:
+Stage 0 asked for a manifest requesting CAMERA only. After installing on the
+device, `dumpsys package` showed the app requesting INTERNET,
+ACCESS_NETWORK_STATE and CAMERA. Tracing it through the manifest-merger blame
+file: `com.google.android.datatransport:transport-backend-cct:2.3.3` — a
+telemetry backend pulled in transitively by ML Kit — declares BOTH INTERNET and
+ACCESS_NETWORK_STATE in its own manifest. So Stage 0's trim was incomplete:
+editing our manifest does not stop a library from adding permissions during the
+merge, and the release build would have shipped requesting network access.
+
+This matters beyond box-ticking. NFR5 is tested by "manifest review", and the
+whole pitch is that the app cannot phone home. A judge running `aapt dump
+permissions` on the release APK would have seen INTERNET.
+
+Fix: a release-only source set that strips both with `tools:node="remove"`.
+Release-only on purpose — the debug and profile manifests need INTERNET for
+`flutter run` hot reload, and stripping it in the main manifest would break
+everyone's development loop.
+
+Check run: `flutter build apk --release`
+Check result: **NOT VERIFIED.** The release build was started but stalled with
+no output for several minutes on this machine (it had already hit one native
+`malloc` OOM earlier in the session while running a plain manifest-generation
+task, likely from running heavy Gradle work back-to-back without enough free
+RAM). The fix below is applied to source and reasoned through the manifest
+merger blame file, but nobody has actually run `aapt dump permissions` on a
+built release APK to confirm INTERNET is gone. Treat this the same as OCR:
+compiles/reasoned-through, not proven.
+Commit: (pending, this session)
+Notes:
+- **NEXT ACTION FOR ANY LAPTOP:** run `flutter build apk --release` (ideally on
+  a machine with more free memory, or after closing other heavy apps), then
+  `aapt dump permissions build/app/outputs/flutter-apk/app-release.apk` and
+  confirm only CAMERA is listed. This is a two-minute check that just could not
+  be completed here — do not skip it before the demo.
+
+## Session 1 end-of-session summary
+Ended: 2026-08-29, Laptop 1.
+
+**DONE and verified (tests or device):**
+- Stage 0 Scaffold — analyze clean, debug APK builds and links (incl. ML Kit native code)
+- Stage 1 Data contracts — pushed to origin/main early to unblock Laptop 2 & 3
+- Stage 2 Test fixtures — 4 JSON files, shared ground truth
+- Stage 3 compare.dart — pure, deterministic, 13 tests pass (4 fixtures + 9 invariants)
+- Stage 4 phrase.dart — rules-based, 26 tests pass, no model
+- Stage 6 parser.dart — 16 tests pass against hand-built block fixtures
+- Stage 7 debug harness — installed and run on the actual iQOO 15 (I2501,
+  Android 16/API 36): renders, Capture Spec opens the real camera, no crash
+
+**COMPILED BUT NOT DEVICE-VERIFIED — do not claim these work:**
+- Stage 5 OCR wrapper (lib/logic/ocr.dart) — has NEVER read a real photograph.
+  This is the single biggest open risk in the project (PRD section 20's own
+  "Known risks" table flags it HIGH). Someone must point the harness at a
+  printed label before claiming F2/F4 work.
+- Release-build permission strip (android/app/src/release/AndroidManifest.xml)
+  — reasoned correct via the manifest-merger blame file, but the actual release
+  APK has not been built and inspected on this machine due to a resource
+  constraint (Gradle stalled after an earlier native OOM). Run
+  `flutter build apk --release` + `aapt dump permissions` before the demo.
+
+**NOT STARTED (Stage 8+, P1/P2 stretch, and everything owned by screens/):**
+- F9 Manual correction UI — Laptop 2, lib/screens/review_extraction.dart
+- F8 Report export (file + clipboard) — Laptop 3, lib/io/report.dart
+- F7 Colour-coded results screen — Laptop 3, lib/screens/results.dart
+- F1/F3 Capture screens (the real UI, not the debug harness) — Laptop 2,
+  lib/screens/capture_spec.dart, capture_assembly.dart
+- F10 Reset — only proven in the debug harness in miniature; needs the real
+  screens wired to it
+- P2 stretch (on-device LLM phrasing, confidence indicators) — explicitly out
+  of scope this session per standing rules; do not start until P0 is fully done
+  and device-verified
+- NFR1 timing measurement (<15s pipeline, 5 runs) — needs a real device run
+  with real photographs, blocked on Stage 5 verification
+- NFR3 negative-case testing (blurry photo, no text, zero discrepancies) —
+  needs real device runs
+- No unit tests exist yet for screens/ or io/ — expected, those aren't written
+
+Current commit: 267c063 (this entry's own commit will be the true HEAD)
+
+**What Laptop 1 should do next, in order:**
+1. Photograph a real printed label with the debug harness and confirm OCR
+   actually returns text (Stage 5 verification — the #1 blocker)
+2. Get a release build through successfully and run the permission check above
+3. Only after both of those: help Laptop 2/3 integrate logic/ into the real
+   screens, since lib/screens/ is off-limits to edit directly this session

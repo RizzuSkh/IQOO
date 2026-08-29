@@ -1,0 +1,19 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Parity is offline by construction (PRD sections 8, 21; NFR5).
+         ML Kit pulls in com.google.android.datatransport:transport-backend-cct,
+         a telemetry backend that declares INTERNET and ACCESS_NETWORK_STATE.
+         Nothing in Parity uses it, so both are stripped from release builds and
+         the shipped app cannot open a socket at all.
+
+         These removals are deliberately NOT in the main manifest: the debug and
+         profile manifests need INTERNET so `flutter run` can attach for hot
+         reload. Release is the build that must be permission-clean. -->
+    <uses-permission android:name="android.permission.INTERNET"
+        tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"
+        tools:node="remove" />
+
+    <application />
+</manifest>
