@@ -134,3 +134,31 @@ Notes:
   no position label of its own, so it belongs in unparsedRows. Corrected the test
   to assert that. Fixture data was not touched.
 
+## Stage 7 — Debug harness in main.dart
+Status: DONE
+Files touched: lib/main.dart
+Check run: `flutter analyze`, then built, installed and launched on the device:
+`flutter build apk --debug`, `adb install -r`, `adb shell am start`
+Check result:
+- analyze — "No issues found! (ran in 6.9s)"
+- build — "√ Built build\app\outputs\flutter-apk\app-debug.apk" (exit 0, 25.5s)
+- install — "Success"
+- launch — process alive (pid 16256), Impeller/Vulkan backend up, Dart VM service
+  listening. `grep -c "FATAL EXCEPTION"` over logcat returned 0.
+- screenshot pulled from the device confirms the UI actually rendered: title,
+  Capture Spec / Capture Assembly / Reset, "Capture the specification, then the
+  assembly.", both sections showing "not captured", "Waiting for both captures."
+- tapped Capture Spec: topResumedActivity became
+  `com.android.camera/.CameraActivity`, so image_picker and the CAMERA
+  permission are wired correctly. Backed out; app resumed without crashing.
+Commit: 9ee0dfa
+Notes:
+- Device is I2501 / Android 16 (API 36) — the iQOO. It was not connected earlier
+  in the session and appeared partway through; Stages 0-6 were verified without it.
+- lib/screens/ untouched. This harness is meant to be deleted when Laptop 2 and 3
+  land the real screens.
+- **I did NOT photograph anything.** Backing out of the camera rather than firing
+  the shutter means the OCR -> parser path has still never seen a real image.
+  Someone must point this at a printed label and confirm blocks come back.
+  That is the single most important unverified thing in the project.
+
