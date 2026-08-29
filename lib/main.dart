@@ -1,121 +1,185 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+import 'logic/compare.dart';
+import 'logic/ocr.dart';
+import 'logic/parser.dart';
+import 'logic/phrase.dart';
+import 'models/spec_item.dart';
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// DEBUG HARNESS — NOT THE PRODUCT UI.
+///
+/// This screen exists to prove the pipeline is wired end to end:
+/// camera -> ocr -> parser -> compare -> phrase -> text.
+///
+/// The real capture, review, and results screens live in lib/screens/ and are
+/// owned by Laptop 2 and Laptop 3. This file is replaced when they land.
 
-  // This widget is the root of your application.
+void main() => runApp(const ParityDebugApp());
+
+/// Root of the debug harness.
+class ParityDebugApp extends StatelessWidget {
+  /// Creates the harness app.
+  const ParityDebugApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      title: 'Parity (debug harness)',
+      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
+      home: const PipelineHarness(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+/// Captures two photographs and runs the full pipeline over them.
+class PipelineHarness extends StatefulWidget {
+  /// Creates the harness screen.
+  const PipelineHarness({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<PipelineHarness> createState() => _PipelineHarnessState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _PipelineHarnessState extends State<PipelineHarness> {
+  final ImagePicker _picker = ImagePicker();
+  final OcrReader _ocr = OcrReader();
 
-  void _incrementCounter() {
+  ParseResult? _spec;
+  ParseResult? _assembly;
+  String _status = 'Capture the specification, then the assembly.';
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _ocr.close();
+    super.dispose();
+  }
+
+  /// Photographs one side, runs OCR and the parser, and stores the result.
+  Future<void> _capture({required bool isSpec}) async {
+    final label = isSpec ? 'specification' : 'assembly';
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _busy = true;
+      _status = 'Opening camera for the $label...';
     });
+
+    try {
+      final photo = await _picker.pickImage(source: ImageSource.camera);
+      if (photo == null) {
+        _set('Capture cancelled.');
+        return;
+      }
+
+      _set('Reading the $label...');
+      final blocks = await _ocr.readBlocks(photo.path);
+      final parsed = parseBlocks(blocks);
+
+      if (!mounted) return;
+      setState(() {
+        if (isSpec) {
+          _spec = parsed;
+        } else {
+          _assembly = parsed;
+        }
+        _busy = false;
+        _status =
+            '${blocks.length} blocks read, ${parsed.items.length} rows '
+            'parsed from the $label.';
+      });
+    } on OcrException catch (error) {
+      _set('OCR failed: ${error.message}');
+    } catch (error) {
+      _set('Capture failed: $error');
+    }
+  }
+
+  /// Updates the status line and clears the busy flag.
+  void _set(String message) {
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _status = message;
+    });
+  }
+
+  /// Clears both captures (F10 reset, proven here in miniature).
+  void _reset() {
+    setState(() {
+      _spec = null;
+      _assembly = null;
+      _status = 'Reset. Capture the specification, then the assembly.';
+    });
+  }
+
+  /// The comparison summary, or null until both sides are captured.
+  String? get _summary {
+    final spec = _spec;
+    final assembly = _assembly;
+    if (spec == null || assembly == null) return null;
+    return phraseWithRules(compare(spec.items, assembly.items));
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final summary = _summary;
+
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      appBar: AppBar(title: const Text('Parity — debug harness')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('You have pushed the button this many times:'),
+            FilledButton(
+              onPressed: _busy ? null : () => _capture(isSpec: true),
+              child: const Text('Capture Spec'),
+            ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: _busy ? null : () => _capture(isSpec: false),
+              child: const Text('Capture Assembly'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: _busy ? null : _reset,
+              child: const Text('Reset'),
+            ),
+            const SizedBox(height: 16),
+            Text(_status, style: Theme.of(context).textTheme.bodyMedium),
+            const Divider(height: 32),
+            _extraction('Specification', _spec),
+            _extraction('Assembly', _assembly),
+            const Divider(height: 32),
             Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+              summary ?? 'Waiting for both captures.',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+
+  /// Shows what was extracted from one photograph, including unparsed rows.
+  Widget _extraction(String title, ParseResult? parsed) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
+          if (parsed == null)
+            const Text('not captured')
+          else ...[
+            for (final SpecItem item in parsed.items)
+              Text(
+                '${item.position}: '
+                '${item.component.isEmpty ? "(unread)" : item.component}',
+              ),
+            for (final row in parsed.unparsedRows) Text('unparsed: $row'),
+          ],
+        ],
       ),
     );
   }
