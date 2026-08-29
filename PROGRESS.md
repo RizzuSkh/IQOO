@@ -309,3 +309,171 @@ Current commit: 267c063 (this entry's own commit will be the true HEAD)
 2. Get a release build through successfully and run the permission check above
 3. Only after both of those: help Laptop 2/3 integrate logic/ into the real
    screens, since lib/screens/ is off-limits to edit directly this session
+
+## Session 2 — Audit (no code changes)
+Ran: 2026-08-29, Laptop 1. Read-only audit. Nothing committed by this entry.
+
+**Repository state:** working tree clean, `main` level with `origin/main`
+(0 ahead / 0 behind), HEAD 18d766a. Tracked source is exactly what Session 1
+described: `lib/screens/` and `lib/io/` still contain only `.gitkeep`.
+
+**Re-verified this session (actually run, not inherited from the log above):**
+- `flutter analyze` — "No issues found! (ran in 16.3s)"
+- `flutter test` — "00:00 +43: All tests passed!", exit 0
+  (13 compare + 17 parser + 10 phrase `test()` blocks, 43 cases total)
+- `dart format --output=none --set-exit-if-changed .` — 10 files, 0 changed
+- Secret scan over dart/yaml/kts/xml/properties for api-key/OpenRouter/bearer
+  patterns — no matches (NFR4 holds)
+- `compare.dart` imports only the two model files; `phrase.dart` imports only
+  `diff_result.dart`. Purity claim (FR7, CLAUDE.md 11) confirmed by inspection.
+- minSdk 26 / targetSdk 36 / compileSdk 36 in `android/app/build.gradle.kts`
+  (NFR7 as written; build not re-run, see blocker below)
+
+**Correction to the Stage 7b entry above:** it records its commit as
+"(pending, this session)". It was in fact committed as e0925e9
+("fix: strip network permissions from release manifest"). The stage's
+*verification* is still outstanding — only the commit line was stale.
+
+### BLOCKER FOUND — C: drive is full
+`C:` has **2 MB free of 291 GB (100% used)**. `D:` has 103 GB free.
+
+This is not cosmetic. The first `flutter test` of this session hung for over
+ten minutes and then died with:
+
+```
+FileSystemException: writeFrom failed,
+path = 'C:\Users\...\Temp\flutter_tools.*\flutter_test_compiler.*\output.dill'
+(OS Error: There is not enough space on the disk, errno = 112)
+```
+
+This almost certainly also explains Session 1's Stage 7b symptoms — the stalled
+`flutter build apk --release` and the earlier native `malloc` OOM were blamed on
+RAM, but a full disk produces exactly that behaviour under Gradle.
+
+**Workaround proven to work:** with `TEMP`/`TMP`/`TMPDIR` pointed at
+`D:\tmp_flutter`, `flutter test` completed normally (43 passed). That is how the
+test result above was obtained. It is a workaround, not a fix — Gradle also
+writes to `C:\Users\<user>\.gradle`, so an APK build needs either real free
+space on C: or `GRADLE_USER_HOME` redirected to D: as well.
+
+Largest reclaimable items on C: `AppData\Local\Android` 4.03 GB,
+`AppData\Local\Pub\Cache` 0.73 GB, `AppData\Local\Temp` 0.28 GB,
+`.gradle` 0.14 GB. Freeing those alone will not fix a 291 GB drive with 2 MB
+free — something else on C: is consuming it and needs a human look.
+
+**Until C: has headroom, this laptop cannot build an APK — debug or release.**
+That blocks the Stage 7b permission check, the demo APK, and the backup APK
+required by CLAUDE.md section 21.
+
+### Second blocker — no device attached
+`flutter devices` lists only Windows, Chrome and Edge. `adb devices` is empty.
+The iQOO (I2501) that appeared during Session 1 is not connected now, so no
+device verification could be attempted this session. Stage 5 (OCR against a
+real photograph) remains the single most important unverified thing in the
+project, exactly as Session 1 left it.
+
+### Status against PRD section 27 acceptance criteria
+| Criterion | Status |
+|---|---|
+| Two photographs produce two structured lists on-device | NOT PROVEN — camera opens, no photograph ever taken |
+| All 3 unit tests pass | PASS — 43 tests, re-run this session |
+| All three discrepancy types display correctly | NOT STARTED — no results screen exists |
+| Summary sentence appears with no model present | PASS at logic level; no UI to show it |
+| Full aeroplane-mode run succeeds | NOT TESTED |
+| No crash on all 3 negative cases | NOT TESTED |
+| Pipeline under 15 seconds, measured | NOT MEASURED |
+| Reset gives a clean run | Harness only, never after a real capture |
+| Report file written and clipboard populated | NOT STARTED — `lib/io/` is empty |
+| Clean clone builds on another laptop | NOT TESTED |
+| No secrets in repository | PASS — scanned again this session |
+
+### Build-order position (CLAUDE.md section 22)
+P0 chain F1 → F2 → F3 → F4 → F5 → F6 → F7 → F10.
+F5 and F6 are done and tested. F2/F4 are half done: the parser half is tested,
+the OCR half has never seen a real image. F1/F3 exist only inside the debug
+harness. F7 does not exist. F10 exists only in the harness. **No P1 work has
+been started, which is correct** — F8 and F9 must stay untouched until every P0
+criterion passes.
+
+### Documentation inconsistency still open
+PRD section 17 still lists three `DiffType` values while section 18 and the
+shipped code use four (`unread` is first-class). Session 1 flagged this and
+deliberately did not edit the PRD. It should be fixed so it stops misleading
+Laptop 2 and Laptop 3, by team agreement rather than unilaterally.
+
+### Also noted, not acted on
+- `android/app/build.gradle.kts` release build still signs with the debug
+  keystore (stock Flutter TODO). Acceptable for a hackathon APK; worth knowing.
+- `applicationId` remains `com.rtiparadox.parity.parity` — Session 1 decision,
+  unchanged.
+
+## Session 2 — Actions taken after the audit
+Laptop 1, 2026-08-29. Everything below is code/tooling work that needed no free
+space on `C:`; everything that did need a machine with disk or a human hand is
+written up in `HANDOFF.md` instead.
+
+**Toolchain moved onto D:** `GRADLE_USER_HOME=D:\gradle_home`,
+`TEMP`/`TMP`/`TMPDIR`/`GRADLE_OPTS -Djava.io.tmpdir` all pointed at
+`D:\tmp_flutter`. `D:\gradle_home` was seeded from `C:\Users\<user>\.gradle`
+(145 MB — wrapper and native only; the dependency cache was already gone, so a
+build re-downloads ~1.5 GB). Under this environment `flutter analyze` and
+`flutter test` both run normally. Exact recipe is in HANDOFF.md.
+
+**Device is reachable again.** `adb devices` was empty despite the cable being
+plugged in — a stale daemon, not a cable or a permission. `adb kill-server &&
+adb start-server` brought back `10BFCH1K9Y00237` = I2501, Android 16 / API 36,
+with Session 1's debug APK still installed.
+
+**Git Bash mangles Android paths.** `adb push x /data/local/tmp/` was silently
+rewritten to `C:/Program Files/Git/data/local/tmp/` and failed with
+`secure_mkdirs() failed`. Every adb command needs `MSYS_NO_PATHCONV=1`. This also
+explains the bogus `adb shell df` output earlier in the session.
+
+**Reference images added** — `test/fixtures/parity_spec.png` and
+`parity_assembly.png`, plus `generate_reference_images.ps1` that regenerates
+them. Rendered spec sheets, 1200x1600, black on white, position column at the
+left margin and component column at 58% width so the two arrive as separate OCR
+blocks. Their content is chosen so the correct answer is fixed:
+
+    spec:     P1 NE555   P2 7805    P3 LM358
+    assembly: P1 NE555   P2 LM358   P4 NE555
+
+Expected DiffResult: P3 missing, P4 unexpected, P2 mismatched — 3 discrepancies.
+This gives the project a deterministic on-device check with a known answer,
+which the camera path can never provide.
+
+**Harness gained a reference-image path** (`lib/main.dart`, Laptop 1's file):
+a `Read Reference Images` button runs OCR -> parser -> compare -> phrase over the
+two PNGs read from the app's **own documents directory**. Deliberately the
+documents directory and not `/sdcard/Download`, because shared storage would
+require READ_MEDIA_IMAGES and break NFR5 — this way CAMERA remains the only
+permission. Files get there with `adb push` to `/data/local/tmp` followed by
+`run-as ... cp ... app_flutter/`; confirmed both PNGs are sitting in
+`app_flutter/` on the device now.
+
+Check run: `flutter analyze` — "No issues found! (ran in 22.2s)".
+`dart format` — 0 changed. `flutter test` — re-run at this tree, see commit.
+
+**NOT YET VERIFIED at time of this commit:** the reference-image path has been
+analyzed and formatted but **not yet run on the device** — the debug APK
+containing it was still building when this was committed (cold Gradle cache,
+~1.5 GB of downloads). Nobody has seen it produce the expected sentence yet.
+Treat it exactly like Stage 5: written, not proven. The APK currently installed
+on the phone is the older Session 1 build and does **not** have the button.
+
+**Still handed off, not done** (full prompts in HANDOFF.md):
+1. Photograph a real printed physical label — the one thing reference images
+   cannot substitute for, and still the #1 risk (T+6h stop rule applies)
+2. Release APK + `aapt dump permissions` — Stage 7b, needs a completed build
+3. NFR1 timing over 5 runs; NFR3 negative cases; NFR2 aeroplane-mode run
+4. NFR6 clean clone on Laptop 2 or 3
+5. Backup APK on a second device (CLAUDE.md section 21)
+6. The screens themselves — F7 (P0) before F8/F9 (P1)
+
+**A parser risk worth knowing before anyone photographs anything:** the parser
+expects position and component as two separate OCR blocks. ML Kit merges nearby
+text, so a tight printed row may return one block reading `"P1 NE555"`, which
+fails `^P\d+$` and lands in `unparsedRows` — nothing is lost, but nothing pairs
+either. Widen the column gap first. If it still merges on real photographs, that
+is a `lib/logic/parser.dart` change and therefore Laptop 1's to make; report it
+rather than patching locally.

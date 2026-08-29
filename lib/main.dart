@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'logic/compare.dart';
 import 'logic/ocr.dart';
@@ -42,6 +43,12 @@ class PipelineHarness extends StatefulWidget {
 }
 
 class _PipelineHarnessState extends State<PipelineHarness> {
+  /// Reference spec image read by [_readPushedImages].
+  static const String _specFile = 'parity_spec.png';
+
+  /// Reference assembly image read by [_readPushedImages].
+  static const String _assemblyFile = 'parity_assembly.png';
+
   final ImagePicker _picker = ImagePicker();
   final OcrReader _ocr = OcrReader();
 
@@ -94,6 +101,55 @@ class _PipelineHarnessState extends State<PipelineHarness> {
     }
   }
 
+  /// Runs the pipeline over two reference PNGs pushed to the documents directory.
+  ///
+  /// Device-verification aid, not a product feature. The camera path above is
+  /// the real one, but it needs a human to aim the phone, so its result is
+  /// never the same twice. This reads `parity_spec.png` and
+  /// `parity_assembly.png` from the app documents directory instead, which
+  /// makes the expected [DiffResult] deterministic and lets ML Kit be checked
+  /// on the actual device against a known answer.
+  ///
+  /// The files go in the app's own documents directory precisely so that no
+  /// storage permission is needed — CAMERA stays the only permission (NFR5).
+  /// Push them with:
+  /// `adb push parity_spec.png /data/local/tmp/ && adb shell run-as
+  /// com.rtiparadox.parity.parity cp /data/local/tmp/parity_spec.png
+  /// app_flutter/`
+  ///
+  /// Deleted along with the rest of this harness when the real screens land.
+  Future<void> _readPushedImages() async {
+    setState(() {
+      _busy = true;
+      _status = 'Reading pushed reference images...';
+    });
+
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final specBlocks = await _ocr.readBlocks('${directory.path}/$_specFile');
+      final assemblyBlocks = await _ocr.readBlocks(
+        '${directory.path}/$_assemblyFile',
+      );
+
+      final spec = parseBlocks(specBlocks);
+      final assembly = parseBlocks(assemblyBlocks);
+
+      if (!mounted) return;
+      setState(() {
+        _spec = spec;
+        _assembly = assembly;
+        _busy = false;
+        _status =
+            'Reference images: ${specBlocks.length} spec blocks, '
+            '${assemblyBlocks.length} assembly blocks.';
+      });
+    } on OcrException catch (error) {
+      _set('OCR failed: ${error.message}');
+    } catch (error) {
+      _set('Reference read failed: $error');
+    }
+  }
+
   /// Updates the status line and clears the busy flag.
   void _set(String message) {
     if (!mounted) return;
@@ -139,6 +195,11 @@ class _PipelineHarnessState extends State<PipelineHarness> {
             FilledButton(
               onPressed: _busy ? null : () => _capture(isSpec: false),
               child: const Text('Capture Assembly'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: _busy ? null : _readPushedImages,
+              child: const Text('Read Reference Images'),
             ),
             const SizedBox(height: 8),
             OutlinedButton(
