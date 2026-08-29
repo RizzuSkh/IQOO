@@ -548,3 +548,52 @@ harmless to use.
 - Nobody has run OCR against a real camera photograph yet — still the #1 risk.
 - Release APK permission strip still unverified (`aapt dump permissions`).
 - NFR1/NFR2/NFR3/NFR6 all still outstanding, all need a device.
+
+## Session 4 — fixed "no valid labels found" on the user's own demo image
+
+User reported the crop fix from Session 3 didn't help — same error even
+cropped tight. They'd generated a realistic AI breadboard photo
+(`Downloads\based\ChatGPT Image Aug 29, 2026, 11_54_02 PM.png`, 1536x1024,
+three chips: NE555P, LM358P, LM393N) and expected to use it directly.
+
+**Root cause, confirmed not guessed:** the photo has ZERO text matching
+`^P\d+$` anywhere in it — only each chip's own tiny etched part code, three
+lines per chip (e.g. "NE555P" / "93M" / "DN1810"). No crop setting could ever
+fix this; there was nothing for the parser to find. Verified by replaying the
+photo's actual text through `parseBlocks()` in
+`test/demo_realistic_scenario_test.dart` — it parses to zero items, every
+line landing in `unparsedRows`, exactly reproducing the reported error.
+
+**Fix:** `demo_assets/overlay_labels_on_breadboard.ps1` appends a clean white
+label panel below the photo (not overlaid on top — a first attempt did that
+and put labels in one touching horizontal strip, which risked ML Kit merging
+all three into an unparseable block; caught before it shipped and fixed to
+stack rows vertically like the already-working `demo_spec_A.png` layout).
+Produces `demo_assembly_realistic_match.png` / `_tampered.png`, paired with
+a new `demo_spec_realistic.png`.
+
+**Verified two ways**, not just visually:
+1. `test/demo_realistic_scenario_test.dart` (4 new tests, all passing) replays
+   both the original unlabeled photo (confirms it parses to nothing — the bug)
+   and the new labeled layout at its actual generated coordinates (confirms
+   `parseBlocks()` + `compare()` produce exactly the documented match/tamper
+   results).
+2. Visual read-back of each generated PNG after every script run — caught the
+   horizontal-strip merge risk and a `$photo.Height` accessed after
+   `$photo.Dispose()` bug (silently returned a stale value, drawing the panel
+   at y=0 on top of the photo instead of below it) before committing either.
+
+Check run: `flutter analyze` — 0 issues. `flutter test` — **47/47 passing**
+(43 previous + 4 new).
+
+Files added: `demo_assets/overlay_labels_on_breadboard.ps1`,
+`demo_assets/demo_spec_realistic.png`,
+`demo_assets/demo_assembly_realistic_match.png`,
+`demo_assets/demo_assembly_realistic_tampered.png`,
+`test/demo_realistic_scenario_test.dart`. `demo_assets/README.md` updated
+with the realistic-set instructions and expected results.
+
+**Still not run on a real device** — this fix is verified against the actual
+parser logic with the actual generated coordinates, which is strong evidence,
+but nobody has photographed either the label-panel demo image or a real
+object with the app on the iQOO yet. That remains the top open item.

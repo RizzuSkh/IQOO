@@ -14,11 +14,38 @@ same result over and over and trust it on stage.
 | `demo_spec_A.png` | Specification | P1 NE555, P2 7805, P3 LM358, P4 CD4017 |
 | `demo_assembly_A_match.png` | Assembly (clean run) | identical to spec — proves the MATCH state |
 | `demo_assembly_B_tampered.png` | Assembly (tamper run) | P2 swapped, P3 removed, P5 added |
+| `demo_spec_realistic.png` | Specification | P1 NE555, P2 LM358, P3 LM393 |
+| `demo_assembly_realistic_match.png` | Assembly (clean run) | a real-looking AI-generated breadboard photo + a P1/P2/P3 label panel underneath — proves MATCH with a photo that actually looks like hardware |
+| `demo_assembly_realistic_tampered.png` | Assembly (tamper run) | same photo, P2 mismatched, P3 row omitted |
 
-Regenerate them any time with:
+Regenerate the A/B set with:
 ```powershell
 powershell -File demo_assets\generate_demo_screens.ps1
 ```
+Regenerate the realistic set (needs the source photo at the path hardcoded in
+the script) with:
+```powershell
+powershell -File demo_assets\overlay_labels_on_breadboard.ps1
+```
+
+### Why the realistic set has a label panel glued below the photo
+
+A user-supplied AI-generated breadboard photo looked great but had **zero
+position labels anywhere** — only each chip's own tiny etched part code
+(`NE555P` / `93M` / `DN1810`, three lines per chip). That reproduced the exact
+"no valid labels found" error, and no amount of cropping could fix it, because
+there was nothing in the frame matching the `P1`/`P2`/`P3` pattern the parser
+requires. Confirmed with `test/demo_realistic_scenario_test.dart`, which
+replays the original photo's actual OCR text through `parseBlocks()` and
+asserts it parses to nothing.
+
+The fix is a clean white label panel appended **below** the photo (not
+overlaid on top of it) with P1/P2/P3 stacked vertically, generous gaps between
+rows, and a wide column gap — the same layout already proven to work in
+`demo_spec_A.png`. (A first attempt placed labels in one horizontal strip
+across the photo; that risked ML Kit merging all three into one unparseable
+block, since same-row + touching boxes look like one label to OCR. Fixed by
+stacking rows instead.) Also verified in the same test file.
 
 ## How to run the demo
 
@@ -43,6 +70,13 @@ powershell -File demo_assets\generate_demo_screens.ps1
 6. On the Review screen, check both lists look right, then **Compare & Show
    Results**.
 
+Same steps work for the realistic set — swap in `demo_spec_realistic.png` /
+`demo_assembly_realistic_match.png` / `demo_assembly_realistic_tampered.png`.
+Only difference: the assembly photo is taller (photo + label panel), so when
+photographing it, back up enough that the whole label panel is in frame, or
+scroll the image viewer so the panel fills the shot on its own — the panel is
+what OCR needs to read, the photo above it is just for looking real.
+
 Expected results, so you know a run went correctly before you're on stage:
 
 - **Scenario A** (`demo_spec_A` + `demo_assembly_A_match`): **MATCH**, zero
@@ -50,6 +84,10 @@ Expected results, so you know a run went correctly before you're on stage:
 - **Scenario B** (`demo_spec_A` + `demo_assembly_B_tampered`): **3
   discrepancies** — P2 mismatched (7805 → LM358), P3 missing (LM358), P5
   unexpected (NE555).
+- **Realistic match** (`demo_spec_realistic` + `demo_assembly_realistic_match`):
+  **MATCH**, zero discrepancies.
+- **Realistic tampered** (`demo_spec_realistic` + `demo_assembly_realistic_tampered`):
+  **2 discrepancies** — P2 mismatched (LM358 → NE555), P3 missing (LM393).
 
 ## Why a laptop screen instead of a printout
 
