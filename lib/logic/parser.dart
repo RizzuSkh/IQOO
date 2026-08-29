@@ -9,8 +9,13 @@ import 'ocr.dart';
 ///
 /// Pure and deterministic — no model, no network, no I/O.
 
-/// A position label the parser accepts, e.g. "P1" or "P12".
-final RegExp _positionPattern = RegExp(r'^P\d+$');
+/// A position label the parser accepts: an optional "P" prefix, then digits.
+/// Matches both "P1" (PRD section 17's example) and a bare "1" — the team's
+/// actual verified Bill of Materials (Breadboard_Bill_of_Materials.pdf) uses
+/// bare numbers in its POSITION column, not "P1" style, and the parser used
+/// to reject every one of them, sending the whole document to unparsedRows
+/// regardless of photo quality or crop.
+final RegExp _positionPattern = RegExp(r'^P?\d+$');
 
 /// Trailing punctuation OCR commonly appends to a label, e.g. "P1:" or "P1.".
 final RegExp _trailingPunctuation = RegExp(r'[:.,;\-–—]+$');

@@ -217,4 +217,78 @@ void main() {
       }
     });
   });
+
+  group('bare-digit positions (the team\'s actual verified BOM format)', () {
+    // Breadboard_Bill_of_Materials.pdf's POSITION column reads "1", "2", "3",
+    // "4" -- not "P1" style. The parser used to reject every one of these,
+    // regardless of photo quality, sending the whole document to
+    // unparsedRows. This is that exact document's text, replayed as OCR
+    // blocks would deliver it: position, component, then a third
+    // DESCRIPTION-column block that must be ignored, not appended.
+    test('a bare digit is accepted as a position', () {
+      final result = parseBlocks([
+        block('1', 60, 100),
+        block('NE555', 200, 100),
+      ]);
+      expect(result.items.single.position, '1');
+      expect(result.unparsedRows, isEmpty);
+    });
+
+    test(
+      'the real BOM table parses correctly, including the DESCRIPTION column as noise',
+      () {
+        final result = parseBlocks([
+          block('1', 60, 100),
+          block('NE555', 200, 100),
+          block('Timer IC', 400, 100, width: 160),
+          block('2', 60, 260),
+          block('7805', 200, 260),
+          block('Voltage Regulator', 400, 260, width: 260),
+          block('3', 60, 420),
+          block('LM358', 200, 420),
+          block('Dual Op-Amp', 400, 420, width: 200),
+        ]);
+        expect(result.unparsedRows, isEmpty);
+        expect(
+          result.items.map((i) => '${i.position}:${i.component}').toList(),
+          ['1:NE555', '2:7805', '3:LM358'],
+        );
+        expect(result.ignoredNoise, [
+          'Timer IC',
+          'Voltage Regulator',
+          'Dual Op-Amp',
+        ]);
+      },
+    );
+
+    test(
+      '"P1" style still works -- the fix is additive, not a breaking change',
+      () {
+        final result = parseBlocks([
+          block('P1', 60, 100),
+          block('NE555', 200, 100),
+        ]);
+        expect(result.items.single.position, 'P1');
+      },
+    );
+
+    test(
+      'a bare-digit spec matches a bare-digit assembly reading the same board',
+      () {
+        final spec = parseBlocks([
+          block('1', 60, 100),
+          block('NE555', 200, 100),
+          block('2', 60, 260),
+          block('7805', 200, 260),
+        ]).items;
+        final assembly = parseBlocks([
+          block('1', 60, 100),
+          block('NE555', 200, 100),
+          block('2', 60, 260),
+          block('7805', 200, 260),
+        ]).items;
+        expect(compare(spec, assembly).isMatch, isTrue);
+      },
+    );
+  });
 }

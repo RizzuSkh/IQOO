@@ -46,19 +46,26 @@ function New-DemoScreen {
     Write-Output "wrote $Path"
 }
 
+# Matches Breadboard_Bill_of_Materials.pdf (BB-01, Assembly A) exactly:
+# bare-digit positions (NOT "P1" style -- the real document doesn't use that),
+# positions 1/2/3 populated with NE555/7805/LM358, position 4 a real spare
+# slot with nothing specified. The tamper scenario puts an unauthorised part
+# in that spare slot, which is exactly what "unexpected" means for this board.
+
 # --- Scenario A: everything matches (rehearse the success state) ---
-New-DemoScreen -Path "$PSScriptRoot\demo_spec_A.png" -Heading 'SPECIFICATION' -Rows @(
-    @('P1', 'NE555'), @('P2', '7805'), @('P3', 'LM358'), @('P4', 'CD4017'))
+New-DemoScreen -Path "$PSScriptRoot\demo_spec_A.png" -Heading 'SPECIFICATION - BB-01 Assembly A' -Rows @(
+    @('1', 'NE555'), @('2', '7805'), @('3', 'LM358'))
 New-DemoScreen -Path "$PSScriptRoot\demo_assembly_A_match.png" -Heading 'ASSEMBLY' -Rows @(
-    @('P1', 'NE555'), @('P2', '7805'), @('P3', 'LM358'), @('P4', 'CD4017'))
+    @('1', 'NE555'), @('2', '7805'), @('3', 'LM358'))
 
 # --- Scenario B: three discrepancy types at once (the tamper demo) ---
-# vs spec A: P2 swapped (mismatch), P3 removed (missing), P5 added (unexpected)
+# vs spec A: position 2 swapped (mismatch), position 3 removed (missing),
+# the spare position 4 populated without authorisation (unexpected).
 New-DemoScreen -Path "$PSScriptRoot\demo_assembly_B_tampered.png" -Heading 'ASSEMBLY (TAMPERED)' -Rows @(
-    @('P1', 'NE555'), @('P2', 'LM358'), @('P4', 'CD4017'), @('P5', 'NE555'))
+    @('1', 'NE555'), @('2', 'LM358'), @('4', 'NE555'))
 
 Write-Output ''
 Write-Output 'Expected results:'
 Write-Output '  Scenario A (demo_spec_A + demo_assembly_A_match): MATCH, zero discrepancies'
 Write-Output '  Scenario B (demo_spec_A + demo_assembly_B_tampered): 3 discrepancies -'
-Write-Output '    P2 mismatched (7805 -> LM358), P3 missing (LM358), P5 unexpected (NE555)'
+Write-Output '    2 mismatched (7805 -> LM358), 3 missing (LM358), 4 unexpected (NE555)'

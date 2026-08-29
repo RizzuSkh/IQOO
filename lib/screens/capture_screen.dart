@@ -221,7 +221,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
                   _stage == _Stage.cropping
                       ? 'Trim the frame to just the labels, then scan'
                       : (isSpec
-                            ? 'Position labels clearly in frame (e.g. P1: NE555)'
+                            ? 'Position labels clearly in frame (e.g. "1  NE555" or "P1: NE555")'
                             : 'Ensure all components are visible'),
                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                   textAlign: TextAlign.center,

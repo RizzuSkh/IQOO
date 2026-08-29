@@ -597,3 +597,52 @@ with the realistic-set instructions and expected results.
 parser logic with the actual generated coordinates, which is strong evidence,
 but nobody has photographed either the label-panel demo image or a real
 object with the app on the iQOO yet. That remains the top open item.
+
+## Session 5 — the real bug: position format mismatch with the actual BOM
+
+User reported OCR still failing "even on the written text for the blueprint"
+after Session 4's crop/label fixes. Found `Breadboard_Bill_of_Materials.pdf`
+in the user's Downloads — the team's actual verified spec document (BB-01,
+Assembly A). Its POSITION column reads bare digits: `1`, `2`, `3`, `4` — NOT
+`P1` style. `lib/logic/parser.dart`'s `_positionPattern` was `^P\d+$`,
+rejecting every single row of the real document regardless of photo quality,
+lighting, or crop. This is the actual root cause "even written text fails."
+
+**Fix:** `_positionPattern` changed to `^P?\d+$` — the `P` is now optional.
+Purely additive: every existing "P1"-style test still passes. Verified with
+new tests replaying the BOM's exact table structure (position, component,
+description columns) through `parseBlocks()`, confirming the description
+column is correctly treated as ignored noise (Session 3's fix) rather than
+merged into the component.
+
+**Also found and fixed:** the AI-generated "realistic" breadboard photo from
+Session 4 shows chips etched NE555P/LM358P/LM393N, but the real BOM's
+position 2 calls for a 7805 voltage regulator (a 3-pin TO-220 part, nothing
+like these 8-pin DIP chips). Relabelling the photo "7805" would visually
+contradict itself to anyone who looks closely. Fixed by keeping that demo set
+honest (uses the chips' own real part numbers, documented as "illustrative,
+not the official BOM") and regenerating the primary `demo_spec_A` /
+`demo_assembly_A_match` / `demo_assembly_B_tampered` set to exactly match
+`Breadboard_Bill_of_Materials.pdf`'s real positions (bare digits) and real
+components (NE555, 7805, LM358), with the tamper scenario now putting an
+unauthorised part in the BOM's actual spare slot (position 4) rather than an
+invented position 5.
+
+Also fixed the on-device hint text in `capture_screen.dart` that only showed
+a "P1: NE555" example, which didn't reflect the team's real format.
+
+Check run: `flutter analyze` — 0 issues. `flutter test` — **51/51 passing**
+(47 previous + 4 new in the "bare-digit positions" group).
+
+Files touched: `lib/logic/parser.dart`, `lib/screens/capture_screen.dart`,
+`test/parser_test.dart`, `demo_assets/generate_demo_screens.ps1`,
+`demo_assets/overlay_labels_on_breadboard.ps1`, all demo PNGs regenerated,
+`demo_assets/README.md`.
+
+**Verified on-device this session:** built fresh debug APK, installed on a
+second phone (Realme RMX3031, Android 13/API 33 — not the iQOO), launched
+twice cleanly with zero fatal exceptions, screenshotted the real Home/Capture
+UI running. adb dropped the USB connection partway through re-verification
+(known flaky-cable/daemon issue, not an app issue) — a full real-camera
+end-to-end run against the corrected demo images is still the next concrete
+step once reconnected.
