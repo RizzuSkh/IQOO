@@ -1,0 +1,26 @@
+name: parity
+description: "Offline Android app that compares a physical assembly to its written specification."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Approved dependency set. Nothing is added here without team approval
+  # (CLAUDE.md section 10).
+  image_picker: ^1.1.2                    # camera capture
+  google_mlkit_text_recognition: ^0.15.0  # on-device OCR, Latin script
+  path_provider: ^2.1.5                   # app documents directory
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
