@@ -7,6 +7,65 @@ Environment at session start:
 - Connected devices: Windows desktop, Chrome, Edge. NO Android device or emulator.
 - Remote: https://github.com/RizzuSkh/IQOO.git (branch main)
 
+## For Laptop 2 and Laptop 3 — how to pick this up safely
+
+`main` currently has everything through Stage 7 (see the stage log below), fully
+committed and pushed. Read this before you touch anything.
+
+**Pull first, every time, before starting new work:**
+```
+git checkout main
+git pull origin main
+```
+
+**Ownership boundaries (CLAUDE.md section 17) — do not cross these:**
+- Laptop 1 owns `lib/models/`, `lib/logic/`, `test/`, and `lib/main.dart`. Those
+  files are done for P0 and are load-bearing for both of you — `compare()` and
+  `phraseWithRules()` are the contract everything else calls into. If one of
+  them looks wrong for what you need, ask, don't edit it.
+- Laptop 2 owns `lib/screens/capture_spec.dart`, `capture_assembly.dart`,
+  `review_extraction.dart`.
+- Laptop 3 owns `lib/screens/results.dart`, `lib/io/report.dart`.
+- `lib/screens/` currently has nothing in it but a `.gitkeep` — Laptop 1's
+  `lib/main.dart` is a throwaway debug harness, not the real UI, and does not
+  touch `lib/screens/` at all. You are not merging against anyone else's screen
+  code because none exists yet.
+
+**Work on your own branch, not directly on `main`:**
+```
+git checkout -b feat/capture   # or feat/results
+```
+Commit small, working states as you go. Open a PR back to `main` when a feature
+is usable — don't sit on one giant uncommitted branch.
+
+**What you can build against right now, already tested:**
+- `SpecItem` (`lib/models/spec_item.dart`) — has `copyWith()` ready for F9
+  manual correction.
+- `DiffResult` / `Discrepancy` (`lib/models/diff_result.dart`) — four lists:
+  `missing`, `unexpected`, `mismatched`, `unread`. Use `result.isMatch` for the
+  zero-discrepancy success state (PRD section 23).
+- `compare(spec, assembly)` (`lib/logic/compare.dart`) — pure, deterministic,
+  13 passing tests. Feed it `List<SpecItem>`, get a `DiffResult` back.
+- `phraseWithRules(diffResult)` (`lib/logic/phrase.dart`) — one sentence, 26
+  passing tests, handles the empty case explicitly.
+- `parseBlocks(blocks)` (`lib/logic/parser.dart`) — returns
+  `ParseResult { items, unparsedRows }`. `unparsedRows` is exactly what
+  `review_extraction.dart` (Laptop 2) needs to show the user rows OCR couldn't
+  read as a position.
+- `OcrReader` (`lib/logic/ocr.dart`) — wraps ML Kit, returns `List<OcrBlock>`.
+  **Compiles but has never read a real photograph.** Treat it as unverified
+  until someone runs it against a printed label on a device.
+
+**Before you push:**
+- `flutter analyze` clean, `flutter test` all passing — non-negotiable per
+  CLAUDE.md section 18.
+- Run `flutter format` on anything you touched.
+- Do not `git push --force` to `main`. Do not run `git reset --hard` on a branch
+  someone else may have pulled. If you hit a merge conflict, resolve it — don't
+  discard either side's changes without checking what's in them first.
+- Pull `main` again right before you open your PR in case Laptop 1 or the other
+  laptop landed something while you were working.
+
 ## Stage 0 — Scaffold
 Status: DONE
 Files touched: pubspec.yaml, android/app/build.gradle.kts,
