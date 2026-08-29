@@ -1,0 +1,3 @@
+{"spec":[{"position":"P1","component":"NE555"},{"position":"P2","component":"7805"},{"position":"P3","component":"LM358"}],
+ "assembly":[{"position":"P1","component":"NE555"},{"position":"P3","component":"LM358"}],
+ "expected":{"missing":[{"position":"P2","expected":"7805"}],"unexpected":[],"mismatched":[],"unread":[]}}
