@@ -47,3 +47,7 @@ flutter:
     - demo_assets/dense_spec_school.png
     - demo_assets/dense_assembly_school_tampered.png
     - demo_assets/demo_spec_hospital_db.png
+    - demo_assets/db_hospital.jpg
+    - demo_assets/db_home.jpg
+    - demo_assets/db_home_small.jpg
+    - demo_assets/db_bare.jpg
