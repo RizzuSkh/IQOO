@@ -429,8 +429,11 @@ class _CaptureScreenState extends State<CaptureScreen> {
     final noise = _parseResult.ignoredNoise.isEmpty
         ? ''
         : ' (${_parseResult.ignoredNoise.length} noise ignored)';
+    final ordinal = _parseResult.positionsAreOrdinal
+        ? ' — numbered left to right, no printed labels found'
+        : '';
     return '$_blocksRead block(s) read  |  '
-        '${_parseResult.items.length} row(s) parsed$noise';
+        '${_parseResult.items.length} row(s) parsed$noise$ordinal';
   }
 
   /// Shows what happened with a visual weight matching how serious it is.

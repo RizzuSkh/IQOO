@@ -45,6 +45,14 @@ class OcrBlock {
   /// Height of the block, used to derive the parser's row tolerance.
   double get height => boundingBox.height;
 
+  /// Horizontal centre of the block, used to cluster blocks into columns —
+  /// stacked lines on one breaker (rating, voltage, capacity) share an X
+  /// position the way a row of labels shares a Y position.
+  double get centreX => boundingBox.center.dx;
+
+  /// Width of the block, used to derive the parser's column tolerance.
+  double get width => boundingBox.width;
+
   @override
   String toString() => 'OcrBlock("$text", $boundingBox)';
 }
