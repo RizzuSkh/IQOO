@@ -188,44 +188,52 @@ class _ReviewExtractionScreenState extends State<ReviewExtractionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Review Extraction')),
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: const Text('Review Extraction'),
+      ),
       body: Column(
         children: [
           Expanded(
             child: _section(
               title: 'EXPECTED (Specification)',
-              color: Colors.blue,
+              color: const Color(0xFF4F46E5), // Indigo
               items: _expected,
               unparsed: widget.expectedUnparsed,
               noise: widget.expectedNoise,
               isExpected: true,
             ),
           ),
-          const Divider(height: 1),
+          Container(height: 2, color: const Color(0xFFE2E8F0)),
           Expanded(
             child: _section(
               title: 'OBSERVED (Assembly)',
-              color: Colors.green,
+              color: const Color(0xFF10B981), // Emerald
               items: _observed,
               unparsed: widget.observedUnparsed,
               noise: widget.observedNoise,
               isExpected: false,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: (_expected.isEmpty || _observed.isEmpty)
-                    ? null
-                    : _proceedToResults,
-                icon: const Icon(Icons.compare_arrows),
-                label: const Text('Compare & Show Results'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: (_expected.isEmpty || _observed.isEmpty)
+                      ? null
+                      : _proceedToResults,
+                  icon: const Icon(Icons.compare_arrows_rounded),
+                  label: const Text('Compare & Show Results'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4F46E5),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -237,7 +245,7 @@ class _ReviewExtractionScreenState extends State<ReviewExtractionScreen> {
 
   Widget _section({
     required String title,
-    required MaterialColor color,
+    required Color color,
     required List<SpecItem> items,
     required List<String> unparsed,
     required List<String> noise,
@@ -246,22 +254,32 @@ class _ReviewExtractionScreenState extends State<ReviewExtractionScreen> {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: color.shade100,
-          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.08),
+            border: Border(bottom: BorderSide(color: color.withValues(alpha: 0.15))),
+          ),
           child: Row(
             children: [
+              Icon(
+                isExpected ? Icons.description_outlined : Icons.memory_outlined,
+                color: color,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: color,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.add_circle_outline),
+                icon: Icon(Icons.add_circle_outline_rounded, color: color),
                 tooltip: 'Add row',
                 onPressed: () => _addItem(isExpected),
               ),
@@ -276,54 +294,80 @@ class _ReviewExtractionScreenState extends State<ReviewExtractionScreen> {
           ),
         Expanded(
           child: items.isEmpty
-              ? const Center(child: Text('No items — tap + to add one'))
-              : ListView.builder(
+              ? Center(
+                  child: Text(
+                    'No items detected — tap + to add one',
+                    style: TextStyle(color: Colors.grey.shade500),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                   itemCount: items.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final item = items[index];
                     final isUnread = item.isUnread;
-                    // PRD section 23: an unread component must be visibly
-                    // flagged, never treated as though it matched.
                     return Container(
-                      color: isUnread ? Colors.amber.shade50 : null,
+                      decoration: BoxDecoration(
+                        color: isUnread ? const Color(0xFFFFFBEB) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isUnread ? const Color(0xFFFDE68A) : const Color(0xFFE2E8F0),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.02),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
                       child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: isUnread
-                              ? Colors.amber.shade200
-                              : null,
-                          child: Text(item.position),
+                        onTap: () => _editItem(index, isExpected),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        leading: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: isUnread ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            item.position,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: isUnread ? const Color(0xFFD97706) : const Color(0xFF1E293B),
+                            ),
+                          ),
                         ),
                         title: Text(
-                          isUnread ? 'Unread — needs a value' : item.component,
-                          style: isUnread
-                              ? TextStyle(
-                                  color: Colors.amber.shade900,
-                                  fontStyle: FontStyle.italic,
-                                )
-                              : null,
+                          isUnread ? 'Unread — needs value' : item.component,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: isUnread ? const Color(0xFFB45309) : const Color(0xFF0F172A),
+                            fontStyle: isUnread ? FontStyle.italic : FontStyle.normal,
+                          ),
                         ),
                         subtitle: Text(
                           isUnread
-                              ? 'OCR could not read this — tap to enter it manually'
+                              ? 'Tap to enter manually'
                               : 'Confidence: ${(item.confidence * 100).toInt()}%',
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.edit),
+                              icon: const Icon(Icons.edit_outlined, size: 20),
                               onPressed: () => _editItem(index, isExpected),
                             ),
                             IconButton(
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.red,
-                              ),
+                              icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Color(0xFFEF4444)),
                               onPressed: () => _deleteItem(index, isExpected),
                             ),
                           ],
                         ),
-                        onTap: () => _editItem(index, isExpected),
                       ),
                     );
                   },
@@ -333,8 +377,6 @@ class _ReviewExtractionScreenState extends State<ReviewExtractionScreen> {
     );
   }
 
-  /// Shows what OCR found but didn't turn into a row, so the operator knows
-  /// to look closer rather than assuming the photo was read completely.
   Widget _diagnostics({
     required List<String> unparsed,
     required List<String> noise,
@@ -342,25 +384,25 @@ class _ReviewExtractionScreenState extends State<ReviewExtractionScreen> {
   }) {
     final total = unparsed.length + noise.length;
     return Container(
-      color: Colors.amber.shade50,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
       child: ExpansionTile(
-        leading: const Icon(Icons.info_outline, color: Colors.amber),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+        leading: const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 20),
         title: Text(
-          '$total item${total == 1 ? '' : 's'} from the photo were not used — tap to check',
-        ),
-        childrenPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 8,
+          '$total unused OCR text line${total == 1 ? '' : 's'}',
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF92400E)),
         ),
         children: [
           for (final text in unparsed)
             ListTile(
               dense: true,
-              leading: const Icon(Icons.help_outline, size: 20),
-              title: Text('Unrecognised row: "$text"'),
-              subtitle: const Text(
-                "Didn't start with a position like P1 — add it manually if it's real.",
-              ),
+              leading: const Icon(Icons.help_outline_rounded, size: 18, color: Color(0xFFD97706)),
+              title: Text('Unrecognised: "$text"', style: const TextStyle(fontSize: 12)),
               trailing: TextButton(
                 child: const Text('Add'),
                 onPressed: () => _addItem(isExpected, prefillComponent: text),
@@ -369,11 +411,8 @@ class _ReviewExtractionScreenState extends State<ReviewExtractionScreen> {
           for (final text in noise)
             ListTile(
               dense: true,
-              leading: const Icon(Icons.block, size: 20),
-              title: Text('Ignored near a row: "$text"'),
-              subtitle: const Text(
-                'Treated as stray text, not part of any component.',
-              ),
+              leading: const Icon(Icons.block_rounded, size: 18, color: Colors.grey),
+              title: Text('Ignored stray: "$text"', style: const TextStyle(fontSize: 12, color: Colors.grey)),
             ),
         ],
       ),

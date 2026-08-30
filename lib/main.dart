@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'screens/capture_screen.dart';
 
 void main() {
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+  ));
   runApp(const ParityApp());
 }
 
@@ -14,54 +19,132 @@ class ParityApp extends StatelessWidget {
       title: 'Parity',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF4F46E5), // Indigo
+          brightness: Brightness.light,
+          surface: const Color(0xFFF8FAFC),
+        ),
+        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          iconTheme: IconThemeData(color: Color(0xFF0F172A)),
+          titleTextStyle: TextStyle(
+            color: Color(0xFF0F172A),
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            elevation: 0,
+            backgroundColor: const Color(0xFF4F46E5),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            textStyle: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+        cardTheme: CardThemeData(
+          elevation: 4,
+          shadowColor: Colors.black.withValues(alpha: 0.04),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          color: Colors.white,
+        ),
       ),
       home: const HomeScreen(),
     );
   }
 }
 
-/// Bundled sample images for "Run Demo Sample" — see pubspec.yaml assets and
-/// CaptureScreen.assetOverride. This is the real-photo MCB scenario
-/// (demo_assets/overlay_labels_on_mcb_photo.ps1): an actual photograph of
-/// the team's Havells distribution board with a label panel appended below
-/// it, so the pipeline runs against a genuine physical object, not an
-/// illustration. Position 2 mismatched (C32 -> C16), position 4 missing,
-/// position 7 an unauthorised breaker in a spare slot.
-/// Two other scenarios are still bundled and work the same way — swap these
-/// two constants to switch: the illustrated MCB panel
-/// (demo_spec_mcb.png / demo_assembly_mcb_tampered.png) or the electronics
-/// breadboard (demo_spec_A.png / demo_assembly_B_tampered.png).
 const String _demoSpecAsset = 'demo_assets/demo_spec_mcb_real.png';
 const String _demoAssemblyTamperedAsset =
     'demo_assets/demo_assembly_mcb_real_tampered.png';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _animController;
+  late Animation<double> _fadeAnim;
+  late Animation<Offset> _slideAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _fadeAnim = CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOutCubic,
+    );
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animController,
+      curve: Curves.easeOutCubic,
+    ));
+    _animController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
 
   void _startLiveVerification(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const CaptureScreen(mode: CaptureMode.spec),
+      PageRouteBuilder(
+        pageBuilder: (context, anim, secAnim) =>
+            const CaptureScreen(mode: CaptureMode.spec),
+        transitionsBuilder: (context, anim, secAnim, child) {
+          return FadeTransition(
+            opacity: anim,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0.05, 0),
+                end: Offset.zero,
+              ).animate(anim),
+              child: child,
+            ),
+          );
+        },
       ),
     );
   }
 
-  /// Runs the full pipeline against bundled sample images instead of the
-  /// camera — a stage-safety fallback (CLAUDE.md section 21: "recorded
-  /// backup demo") for when lighting or camera focus can't be trusted live,
-  /// and a way to demonstrate a real discrepancy without a physical board.
   void _runDemoSample(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const CaptureScreen(
+      PageRouteBuilder(
+        pageBuilder: (context, anim, secAnim) => const CaptureScreen(
           mode: CaptureMode.spec,
           assetOverride: _demoSpecAsset,
           nextAssetOverride: _demoAssemblyTamperedAsset,
         ),
+        transitionsBuilder: (context, anim, secAnim, child) {
+          return FadeTransition(opacity: anim, child: child);
+        },
       ),
     );
   }
@@ -69,119 +152,190 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Parity'),
-        centerTitle: true,
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 16),
-              Icon(
-                Icons.compare_arrows,
-                size: 80,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Assembly Verification',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Compare physical assembly to specification',
-                style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 48),
-
-              ElevatedButton.icon(
-                onPressed: () => _startLiveVerification(context),
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Start Verification'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  textStyle: const TextStyle(fontSize: 18),
-                ),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => _runDemoSample(context),
-                icon: const Icon(Icons.play_circle_outline),
-                label: const Text('Run Demo Sample'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  textStyle: const TextStyle(fontSize: 15),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Runs the full pipeline on bundled sample images — a known-good '
-                'fallback if venue lighting or the camera can\'t be trusted live.',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.offline_bolt, color: Colors.green),
-                          SizedBox(width: 8),
-                          Text(
-                            'Fully Offline',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'All OCR and comparison happens on device. No internet required.',
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.speed, color: Colors.blue),
-                          SizedBox(width: 8),
-                          Text(
-                            'Fast Results',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Two photos, instant comparison. Reports what differs only.',
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFEEF2FF),
+              Color(0xFFF8FAFC),
             ],
           ),
         ),
+        child: SafeArea(
+          child: FadeTransition(
+            opacity: _fadeAnim,
+            child: SlideTransition(
+              position: _slideAnim,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 24),
+                    // Header Logo Badge
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF4F46E5).withValues(alpha: 0.12),
+                              blurRadius: 32,
+                              offset: const Offset(0, 12),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.compare_arrows_rounded,
+                          size: 56,
+                          color: Color(0xFF4F46E5),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Title
+                    const Text(
+                      'Assembly Verification',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.8,
+                        color: Color(0xFF0F172A),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Deterministic, offline equipment verification engine.',
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Color(0xFF64748B),
+                        height: 1.4,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 36),
+
+                    // Action Buttons
+                    ElevatedButton(
+                      onPressed: () => _startLiveVerification(context),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.camera_alt_rounded, size: 20),
+                          SizedBox(width: 10),
+                          Text('Start Verification'),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () => _runDemoSample(context),
+                      icon: const Icon(Icons.play_circle_outline_rounded, color: Color(0xFF4F46E5)),
+                      label: const Text('Run Demo Sample'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        foregroundColor: const Color(0xFF4F46E5),
+                        side: const BorderSide(color: Color(0xFFCBD5E1)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Executes pipeline on bundled MCB panel sample images.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Feature Cards
+                    _buildFeatureTile(
+                      icon: Icons.bolt_rounded,
+                      iconBg: const Color(0xFFFEF3C7),
+                      iconColor: const Color(0xFFD97706),
+                      title: 'Instant Execution',
+                      subtitle: 'Local ML Kit text recognition in milliseconds.',
+                    ),
+                    const SizedBox(height: 14),
+                    _buildFeatureTile(
+                      icon: Icons.shield_rounded,
+                      iconBg: const Color(0xFFD1FAE5),
+                      iconColor: const Color(0xFF059669),
+                      title: '100% Offline',
+                      subtitle: 'Zero network calls. Air-gapped compliance.',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureTile({
+    required IconData icon,
+    required Color iconBg,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: iconColor, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

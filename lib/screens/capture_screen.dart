@@ -273,111 +273,156 @@ class _CaptureScreenState extends State<CaptureScreen> {
   Widget build(BuildContext context) {
     final isSpec = widget.mode == CaptureMode.spec;
     final title = isSpec ? 'Capture Specification' : 'Capture Assembly';
-    final accent = isSpec ? Colors.blue : Colors.green;
+    final accentColor = isSpec ? const Color(0xFF4F46E5) : const Color(0xFF10B981);
     final isDemo = widget.assetOverride != null;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text(title),
         actions: [
           if (isDemo)
-            const Padding(
-              padding: EdgeInsets.only(right: 12),
-              child: Chip(
-                label: Text('DEMO SAMPLE', style: TextStyle(fontSize: 11)),
-                visualDensity: VisualDensity.compact,
+            Container(
+              margin: const EdgeInsets.only(right: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEF2FF),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFC7D2FE)),
+              ),
+              child: const Text(
+                'DEMO MODE',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF4338CA),
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
         ],
       ),
       body: Column(
         children: [
+          // Header banner card
           Container(
+            margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             padding: const EdgeInsets.all(16),
-            color: accent.shade50,
-            width: double.infinity,
-            child: Column(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: accentColor.withValues(alpha: 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+              border: Border.all(color: accentColor.withValues(alpha: 0.15)),
+            ),
+            child: Row(
               children: [
-                Icon(
-                  isSpec ? Icons.description : Icons.memory,
-                  size: 48,
-                  color: accent,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isSpec
-                      ? 'Photograph the specification sheet'
-                      : 'Photograph the physical assembly',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  textAlign: TextAlign.center,
+                  child: Icon(
+                    isSpec ? Icons.description_outlined : Icons.memory_outlined,
+                    size: 28,
+                    color: accentColor,
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  _stage == _Stage.cropping
-                      ? 'Trim the frame to just the labels, then scan'
-                      : (isSpec
-                            ? 'Position labels clearly in frame (e.g. "1  NE555" or "P1: NE555")'
-                            : 'Ensure all components are visible'),
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  textAlign: TextAlign.center,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isSpec
+                            ? 'Specification Photo'
+                            : 'Physical Assembly Photo',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _stage == _Stage.cropping
+                            ? 'Adjust sliders to trim noise before scanning'
+                            : (isSpec
+                                  ? 'Ensure labels & components are clear'
+                                  : 'Capture complete physical board'),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-          Expanded(child: _body(accent)),
+          Expanded(child: _body(accentColor)),
           if (_error.isNotEmpty)
             Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.amber.shade100,
-              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.info_outline, size: 18, color: Colors.brown),
-                  const SizedBox(width: 8),
+                  const Icon(Icons.info_outline_rounded, size: 20, color: Color(0xFFD97706)),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       _error,
-                      style: const TextStyle(color: Colors.brown, fontSize: 13),
+                      style: const TextStyle(color: Color(0xFF92400E), fontSize: 13, height: 1.3),
                     ),
                   ),
                 ],
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: _actions(accent, isSpec),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: _actions(accentColor, isSpec),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _body(MaterialColor accent) {
+  Widget _body(Color accent) {
     if (_loadingAsset) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Loading demo sample...'),
+            CircularProgressIndicator(color: accent),
+            const SizedBox(height: 16),
+            const Text('Loading demo sample...', style: TextStyle(color: Color(0xFF64748B))),
           ],
         ),
       );
     }
 
     if (_stage == _Stage.processing) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Reading text on-device (ML Kit)...'),
+            CircularProgressIndicator(color: accent),
+            const SizedBox(height: 16),
+            const Text('Running ML Kit OCR...', style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
           ],
         ),
       );
@@ -389,17 +434,24 @@ class _CaptureScreenState extends State<CaptureScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isDemo ? Icons.play_circle_outline : Icons.camera_alt,
-              size: 80,
-              color: Colors.grey.shade400,
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isDemo ? Icons.play_circle_outline_rounded : Icons.camera_alt_rounded,
+                size: 64,
+                color: accent,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
               isDemo
-                  ? 'Tap the button below to reload the demo sample'
-                  : 'Tap the button below to take a photo',
-              style: TextStyle(color: Colors.grey.shade600),
+                  ? 'Tap below to load sample demo images'
+                  : 'Tap below to capture a new photo',
+              style: const TextStyle(color: Color(0xFF64748B), fontSize: 15),
             ),
           ],
         ),
@@ -412,8 +464,19 @@ class _CaptureScreenState extends State<CaptureScreen> {
     return Column(
       children: [
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(8),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
             child: AspectRatio(
               aspectRatio: width / height,
               child: Stack(
@@ -427,15 +490,16 @@ class _CaptureScreenState extends State<CaptureScreen> {
                       left: 0,
                       right: 0,
                       child: Container(
-                        padding: const EdgeInsets.all(8),
-                        color: Colors.black.withValues(alpha: 0.7),
+                        padding: const EdgeInsets.all(12),
+                        color: Colors.black.withValues(alpha: 0.75),
                         child: Text(
-                          '$_blocksRead text block(s) read -> '
+                          '$_blocksRead block(s) read  |  '
                           '${_parseResult.items.length} row(s) parsed'
-                          '${_parseResult.ignoredNoise.isEmpty ? '' : ', ${_parseResult.ignoredNoise.length} ignored as noise'}',
+                          '${_parseResult.ignoredNoise.isEmpty ? '' : ' (${_parseResult.ignoredNoise.length} noise ignored)'}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
+                            fontWeight: FontWeight.w500,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -453,8 +517,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
     );
   }
 
-  /// Darkens the trimmed-away edges so the operator can see exactly what OCR
-  /// will and won't look at.
   Widget _cropMask() {
     return IgnorePointer(
       child: Stack(
@@ -509,23 +571,22 @@ class _CaptureScreenState extends State<CaptureScreen> {
     );
   }
 
-  Widget _cropControls(MaterialColor accent) {
+  Widget _cropControls(Color accent) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           Row(
             children: [
               const SizedBox(
                 width: 72,
-                child: Text('Sides', style: TextStyle(fontSize: 12)),
+                child: Text('Sides', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF475569))),
               ),
               Expanded(
                 child: Slider(
                   value: _hInset,
                   max: 0.45,
                   activeColor: accent,
-                  label: '${(_hInset * 100).round()}%',
                   onChanged: (v) => setState(() => _hInset = v),
                 ),
               ),
@@ -535,24 +596,28 @@ class _CaptureScreenState extends State<CaptureScreen> {
             children: [
               const SizedBox(
                 width: 72,
-                child: Text('Top/Bottom', style: TextStyle(fontSize: 12)),
+                child: Text('Top/Bottom', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF475569))),
               ),
               Expanded(
                 child: Slider(
                   value: _vInset,
                   max: 0.45,
                   activeColor: accent,
-                  label: '${(_vInset * 100).round()}%',
                   onChanged: (v) => setState(() => _vInset = v),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => _runOcr(useFullPhoto: true),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
                   child: const Text('Use Full Photo'),
                 ),
               ),
@@ -561,11 +626,13 @@ class _CaptureScreenState extends State<CaptureScreen> {
                 flex: 2,
                 child: ElevatedButton.icon(
                   onPressed: () => _runOcr(useFullPhoto: false),
-                  icon: const Icon(Icons.crop),
+                  icon: const Icon(Icons.crop_rounded),
                   label: const Text('Scan Selected Area'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: accent,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                 ),
               ),
@@ -578,31 +645,38 @@ class _CaptureScreenState extends State<CaptureScreen> {
 
   Widget _itemsPreview() {
     return Container(
-      height: 100,
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      height: 90,
+      margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      child: ListView.builder(
+      child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(12),
         itemCount: _parseResult.items.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
           final item = _parseResult.items[index];
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    item.position,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Text(item.component.isEmpty ? '<empty>' : item.component),
-                ],
-              ),
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  item.position,
+                  style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+                ),
+                Text(
+                  item.component.isEmpty ? '<empty>' : item.component,
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                ),
+              ],
             ),
           );
         },
@@ -610,7 +684,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
     );
   }
 
-  Widget _actions(MaterialColor accent, bool isSpec) {
+  Widget _actions(Color accent, bool isSpec) {
     if (_loadingAsset) {
       return const SizedBox.shrink();
     }
@@ -623,12 +697,13 @@ class _CaptureScreenState extends State<CaptureScreen> {
           onPressed: isDemo
               ? () => _loadAsset(widget.assetOverride!)
               : _takePhoto,
-          icon: Icon(isDemo ? Icons.play_circle_outline : Icons.camera),
+          icon: Icon(isDemo ? Icons.play_circle_fill_rounded : Icons.camera_alt_rounded),
           label: Text(isDemo ? 'Reload Demo Sample' : 'Take Photo'),
           style: ElevatedButton.styleFrom(
             backgroundColor: accent,
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
         ),
       );
@@ -639,31 +714,40 @@ class _CaptureScreenState extends State<CaptureScreen> {
         width: double.infinity,
         child: OutlinedButton.icon(
           onPressed: _stage == _Stage.processing ? null : _retake,
-          icon: const Icon(Icons.replay),
-          label: const Text('Retake'),
+          icon: const Icon(Icons.replay_rounded),
+          label: const Text('Retake Photo'),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
         ),
       );
     }
 
-    // _Stage.done
     return Row(
       children: [
         Expanded(
           child: OutlinedButton.icon(
             onPressed: _retake,
-            icon: const Icon(Icons.replay),
+            icon: const Icon(Icons.replay_rounded),
             label: const Text('Retake'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            ),
           ),
         ),
         const SizedBox(width: 16),
         Expanded(
           child: ElevatedButton.icon(
             onPressed: _proceed,
-            icon: const Icon(Icons.arrow_forward),
-            label: Text(isSpec ? 'Next' : 'Compare'),
+            icon: const Icon(Icons.arrow_forward_rounded),
+            label: Text(isSpec ? 'Next Step' : 'Compare'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple,
+              backgroundColor: const Color(0xFF4F46E5),
               foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             ),
           ),
         ),
