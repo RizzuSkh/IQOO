@@ -38,3 +38,6 @@ flutter:
     - demo_assets/demo_spec_mcb.png
     - demo_assets/demo_assembly_mcb_match.png
     - demo_assets/demo_assembly_mcb_tampered.png
+    - demo_assets/demo_spec_mcb_real.png
+    - demo_assets/demo_assembly_mcb_real_match.png
+    - demo_assets/demo_assembly_mcb_real_tampered.png

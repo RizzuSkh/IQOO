@@ -14,55 +14,57 @@ that exists only as a stage-safety fallback and a way to test the pipeline
 without a phone in hand. **The actual demo is the camera.** That's the whole
 point of the project: it reads a physical scene, not a file.
 
-## Primary scenario: MCB distribution board (recommended)
+## Primary scenario: real MCB distribution board photo (recommended)
 
 | File | Use as | Content |
 |---|---|---|
-| `demo_spec_mcb.png` | Specification | Blueprint: 5 positions, ratings 32A/20A/16A/6A/32A |
-| `demo_assembly_mcb_match.png` | Assembly (clean run) | Illustrated panel + matching labels — proves MATCH |
-| `demo_assembly_mcb_tampered.png` | Assembly (tamper run) | Position 2 mismatched, 4 missing, 6 an unauthorised extra breaker |
+| `demo_spec_mcb_real.png` | Specification | Blueprint: 6 positions (5× C32, 1× DP) — matches the real board exactly |
+| `demo_assembly_mcb_real_match.png` | Assembly (clean run) | The **actual Havells board photo** + a matching label panel — MATCH |
+| `demo_assembly_mcb_real_tampered.png` | Assembly (tamper run) | Same photo, position 2 mismatched, 4 missing, 7 an unauthorised extra breaker |
 
 Regenerate with:
 ```powershell
-powershell -File demo_assets\generate_mcb_demo.ps1
+powershell -File demo_assets\overlay_labels_on_mcb_photo.ps1
 ```
+(needs `demo_assets/source_mcb_panel_photo.png` — a PNG conversion of the
+team's Havells board photo; GDI+ can't open the original `.webp` directly,
+see the script's header comment for the WPF/WIC conversion one-liner if you
+need to redo it from a different source photo.)
 
-### Why an illustration instead of a photo of a real MCB panel
+This is a real photograph of the team's actual board, not an illustration —
+this is what "point the camera at the real thing" should mean. The label
+panel below the photo exists for the same reason PRD section 19 already
+calls for printed labels: the ratings really are printed on each breaker
+("C 32"), but at a size that survives being photographed in a close-up
+product shot, not at arm's length off a laptop screen during a live demo.
+The panel reproduces the same true values in large print so OCR reads them
+reliably — it doesn't invent anything: every "C32" in the match scenario is
+exactly what's printed on that breaker in the photo.
 
-The Havells panel photo shared in chat has the same problem the original
-breadboard photo had: current ratings are printed in tiny text directly on
-each switch, with no separate position label anywhere on the board. Reusing
-someone else's product photo also risks the exact mismatch caught last
-time — labelling a picture with text that doesn't match what's actually
-printed on it, which a technically literate judge would notice immediately.
+**One honest limitation:** only one photograph of this board exists, so the
+match and tampered demos reuse the identical photo with different label
+panels underneath — the tampered scenario's "C16" for position 2 isn't
+literally printed anywhere in the photo (it's a claimed value, the same
+class of illustrative choice as the breadboard's realistic set). For a demo
+moment where a judge should visibly *see* something change, use the fully
+illustrated `demo_assembly_mcb_tampered.png` below instead, which is drawn
+from scratch precisely so it can show a genuinely different state.
 
-So this panel is drawn from scratch: a distribution-board illustration with
-five breaker switches, followed by a clean label panel with position and
-rating baked in from the start. It's not trying to pass as a photograph — it
-reads as a technical diagram, which is arguably a better fit for a
-"blueprint" anyway, and the labels are correct and legible by construction.
+## Alternate scenarios (still bundled, same technique)
 
-If you'd rather use a real device photo of a real object for extra
-authenticity, that's exactly what section 19 of the PRD already recommends:
-print small physical position labels (bold, black on white, ≥1cm tall) and
-tape one next to each breaker on an actual panel, then photograph that
-directly — no laptop screen needed at that point.
+| Scenario | Spec | Match | Tampered |
+|---|---|---|---|
+| Illustrated MCB panel | `demo_spec_mcb.png` | `demo_assembly_mcb_match.png` | `demo_assembly_mcb_tampered.png` |
+| Electronics breadboard (matches `Breadboard_Bill_of_Materials.pdf` exactly) | `demo_spec_A.png` | `demo_assembly_A_match.png` | `demo_assembly_B_tampered.png` |
+| AI-generated breadboard photo (illustrative, not the official BOM) | `demo_spec_realistic.png` | `demo_assembly_realistic_match.png` | `demo_assembly_realistic_tampered.png` |
 
-## Alternate scenario: electronics breadboard (still available)
-
-| File | Use as | Content |
-|---|---|---|
-| `demo_spec_A.png` | Specification | Matches `Breadboard_Bill_of_Materials.pdf` exactly: 1 NE555, 2 7805, 3 LM358 |
-| `demo_assembly_A_match.png` | Assembly (clean run) | identical to spec — MATCH |
-| `demo_assembly_B_tampered.png` | Assembly (tamper run) | 2 mismatched, 3 missing, 4 unexpected |
-| `demo_spec_realistic.png` / `demo_assembly_realistic_*.png` | — | An AI-generated breadboard photo + label panel — illustrative only, does not match the official BOM's actual parts (see comments in `overlay_labels_on_breadboard.ps1`) |
-
-Regenerate with `generate_demo_screens.ps1` / `overlay_labels_on_breadboard.ps1`.
+Regenerate with `generate_mcb_demo.ps1` / `generate_demo_screens.ps1` /
+`overlay_labels_on_breadboard.ps1` respectively.
 
 `lib/main.dart`'s `_demoSpecAsset` / `_demoAssemblyTamperedAsset` constants
 control which scenario the in-app "Run Demo Sample" button uses — currently
-the MCB set. Swap them to point at the breadboard files if you want that
-story instead.
+the real MCB photo. Swap them to point at any of the files above to switch
+which story that button tells.
 
 ## Position format — worth knowing
 
@@ -75,10 +77,10 @@ which is why OCR failed even on perfectly legible printed text early on — see
 
 ## How to run the demo — real camera, step by step
 
-1. Open `demo_spec_mcb.png` on the laptop, **full-screen** (an image viewer's
-   fullscreen mode, or a browser tab with F11 — anything that removes
-   toolbars and other on-screen text). Max screen brightness, and angle the
-   screen slightly away from overhead lights to kill glare.
+1. Open `demo_spec_mcb_real.png` on the laptop, **full-screen** (an image
+   viewer's fullscreen mode, or a browser tab with F11 — anything that
+   removes toolbars and other on-screen text). Max screen brightness, and
+   angle the screen slightly away from overhead lights to kill glare.
 2. On the phone, open Parity and tap **Start Verification** (not "Run Demo
    Sample" — that one skips the camera). Tap **Take Photo** on the Capture
    Specification screen. Hold the phone steady, perpendicular to the laptop
@@ -94,21 +96,28 @@ which is why OCR failed even on perfectly legible printed text early on — see
    ignored as stray text or didn't match a position. If something's off,
    **Retake** and crop tighter; if it's close enough, you can also fix
    individual rows by hand on the next screen.
-5. Tap **Next**. Swap the laptop display to `demo_assembly_mcb_match.png` (or
-   `_tampered.png` for the discrepancy story) and repeat step 2 onward for
-   Capture Assembly.
+5. Tap **Next**. Swap the laptop display to `demo_assembly_mcb_real_match.png`
+   (or `demo_assembly_mcb_real_tampered.png` for the discrepancy story) and
+   repeat step 2 onward for Capture Assembly. This image is taller (the real
+   board photo plus the label panel below it) — back up a little or scroll
+   the viewer so the whole label panel is in frame; that panel is what OCR
+   needs to read, the photo above it is what makes the demo look — and
+   be — real.
 6. On the Review screen, glance at both lists — this is also where you'd
    catch and fix anything OCR got wrong before comparing. Tap **Compare &
    Show Results**.
 
 Expected results, so you know a run went correctly before you're on stage:
 
-- **MCB match** (`demo_spec_mcb` + `demo_assembly_mcb_match`): **MATCH**,
-  zero discrepancies.
-- **MCB tampered** (`demo_spec_mcb` + `demo_assembly_mcb_tampered`): **3
-  discrepancies** — position 2 mismatched (20A → 16A), position 4 missing
-  (6A), position 6 unexpected (20A) — an unauthorised breaker in a spare
-  slot, mirroring exactly how a judge could plausibly "tamper" a real panel.
+- **MCB real-photo match** (`demo_spec_mcb_real` + `demo_assembly_mcb_real_match`):
+  **MATCH**, zero discrepancies.
+- **MCB real-photo tampered** (`demo_spec_mcb_real` + `demo_assembly_mcb_real_tampered`):
+  **3 discrepancies** — position 2 mismatched (C32 → C16), position 4 missing
+  (C32), position 7 unexpected (C32) — an unauthorised breaker in a spare
+  slot, mirroring exactly how a judge could plausibly tamper a real panel.
+- **MCB illustrated match** (`demo_spec_mcb` + `demo_assembly_mcb_match`): **MATCH**.
+- **MCB illustrated tampered** (`demo_spec_mcb` + `demo_assembly_mcb_tampered`):
+  **3 discrepancies** — 2 mismatched (20A→16A), 4 missing (6A), 6 unexpected (20A).
 - **Breadboard match** (`demo_spec_A` + `demo_assembly_A_match`): **MATCH**.
 - **Breadboard tampered** (`demo_spec_A` + `demo_assembly_B_tampered`): **3
   discrepancies** — 2 mismatched, 3 missing, 4 unexpected.

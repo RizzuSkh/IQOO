@@ -836,3 +836,56 @@ Files touched: `lib/main.dart`, `lib/screens/results_screen.dart`,
 `pubspec.yaml`, `android/app/src/main/res/mipmap-*/ic_launcher.png` (all 5),
 `demo_assets/generate_mcb_demo.ps1` (new), `demo_assets/branding/` (new),
 `test/demo_mcb_scenario_test.dart` (new), `demo_assets/README.md`.
+
+## Session 8 — real MCB board photo, replacing the illustration as primary
+
+User provided the actual Havells SPN distribution-board photo they intend to
+photograph off a laptop screen, and correctly pushed back that the live
+camera path (not the "Run Demo Sample" asset bypass) is what should be shown
+to judges — Session 7's illustrated panel, while honest, wasn't the real
+object the team has.
+
+**Real photo now the primary scenario.** Source photo was `.webp`; GDI+'s
+`System.Drawing` cannot open WebP (throws a generic "Out of memory"), so
+converted via PowerShell's WPF/WIC decoder
+(`System.Windows.Media.Imaging.BitmapImage` -> `PngBitmapEncoder`) to
+`demo_assets/source_mcb_panel_photo.png`, then applied the same
+photo-plus-label-panel technique proven on-device in Session 4
+(`overlay_labels_on_mcb_photo.ps1`). Every value in the match scenario's
+label panel is honest: all five single-pole breakers really are printed
+"C32" in the photo, and the panel just reproduces that in large print — the
+tiny factory print would not survive being photographed off a laptop screen
+at demo distance (PRD section 19's exact concern). Documented in
+`demo_assets/README.md` the one honest limitation this shares with the
+breadboard "realistic" set: only one photograph exists, so the tampered
+scenario's claimed "C16" isn't literally printed anywhere in the (unchanged)
+photo — flagged explicitly, with the fully-illustrated MCB panel offered as
+the alternative when a judge needs to visibly see a change.
+
+`lib/main.dart`'s "Run Demo Sample" now points at this real-photo scenario by
+default. Both the illustrated MCB panel and the breadboard scenario remain
+bundled and swappable.
+
+**Verified without touching the device**, per explicit instruction this
+session to skip screenshot-based verification (it was consuming
+disproportionate time in Session 7). `test/demo_mcb_real_photo_test.dart` (3
+new tests) replays the generator's actual label-panel coordinates through
+`parseBlocks()`/`compare()` and confirms the panel parses cleanly and
+produces exactly the documented match/tamper results — same discipline as
+every prior session's pre-device verification, just without the live-device
+follow-up this time.
+
+Check run: `flutter analyze` — 0 issues. `flutter test` — **62/62 passing**
+(59 previous + 3 new).
+
+Files touched: `lib/main.dart`, `pubspec.yaml`, `demo_assets/README.md`,
+`demo_assets/overlay_labels_on_mcb_photo.ps1` (new),
+`demo_assets/source_mcb_panel_photo.png` (new),
+`test/demo_mcb_real_photo_test.dart` (new).
+
+**Still outstanding, unchanged from Session 7:** nobody has run this specific
+scenario on the actual device yet (the phone was off/unavailable this
+session) — that's the next concrete step, same "Run Demo Sample" walkthrough
+as before, just now pointed at the real board photo. Release APK permission
+verification, NFR1/NFR2/NFR3 formal measurement, and a truly physical (not
+laptop-screen) capture all remain open from earlier sessions.

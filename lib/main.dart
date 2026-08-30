@@ -23,14 +23,19 @@ class ParityApp extends StatelessWidget {
 }
 
 /// Bundled sample images for "Run Demo Sample" — see pubspec.yaml assets and
-/// CaptureScreen.assetOverride. This is the MCB distribution-board scenario
-/// (demo_assets/generate_mcb_demo.ps1): position 2 mismatched (20A -> 16A),
-/// position 4 missing, position 6 an unauthorised breaker in a spare slot.
-/// The electronics-breadboard scenario (demo_spec_A / demo_assembly_B) is
-/// still bundled and works the same way — swap these two constants to switch.
-const String _demoSpecAsset = 'demo_assets/demo_spec_mcb.png';
+/// CaptureScreen.assetOverride. This is the real-photo MCB scenario
+/// (demo_assets/overlay_labels_on_mcb_photo.ps1): an actual photograph of
+/// the team's Havells distribution board with a label panel appended below
+/// it, so the pipeline runs against a genuine physical object, not an
+/// illustration. Position 2 mismatched (C32 -> C16), position 4 missing,
+/// position 7 an unauthorised breaker in a spare slot.
+/// Two other scenarios are still bundled and work the same way — swap these
+/// two constants to switch: the illustrated MCB panel
+/// (demo_spec_mcb.png / demo_assembly_mcb_tampered.png) or the electronics
+/// breadboard (demo_spec_A.png / demo_assembly_B_tampered.png).
+const String _demoSpecAsset = 'demo_assets/demo_spec_mcb_real.png';
 const String _demoAssemblyTamperedAsset =
-    'demo_assets/demo_assembly_mcb_tampered.png';
+    'demo_assets/demo_assembly_mcb_real_tampered.png';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
