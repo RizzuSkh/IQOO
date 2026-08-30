@@ -188,32 +188,56 @@ class ResultsScreen extends StatelessWidget {
                   ),
           ),
 
-          // Bottom actions
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _exportReport(context),
-                    icon: const Icon(Icons.file_download),
-                    label: const Text('Export Report'),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => Navigator.of(
-                      context,
-                    ).popUntil((route) => route.isFirst),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('New Check'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+          // Bottom actions. SafeArea matters here: without it the buttons sit
+          // underneath the system navigation bar on a gesture-nav device and
+          // their labels are visibly clipped — the other screens already wrap
+          // their action rows the same way.
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _exportReport(context),
+                      icon: const Icon(Icons.file_download),
+                      label: const Text(
+                        'Export Report',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.of(
+                        context,
+                      ).popUntil((route) => route.isFirst),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text(
+                        'New Check',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF059669),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
