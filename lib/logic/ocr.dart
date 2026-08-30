@@ -53,6 +53,33 @@ class OcrBlock {
   /// Width of the block, used to derive the parser's column tolerance.
   double get width => boundingBox.width;
 
+  /// Converts this block into a JSON map.
+  Map<String, dynamic> toJson() => {
+        'text': text,
+        'boundingBox': {
+          'left': boundingBox.left,
+          'top': boundingBox.top,
+          'width': boundingBox.width,
+          'height': boundingBox.height,
+        },
+        'confidence': confidence,
+      };
+
+  /// Creates an [OcrBlock] from a JSON map.
+  factory OcrBlock.fromJson(Map<String, dynamic> json) {
+    final box = json['boundingBox'] as Map<String, dynamic>? ?? {};
+    return OcrBlock(
+      text: json['text'] as String? ?? '',
+      boundingBox: Rect.fromLTWH(
+        (box['left'] as num?)?.toDouble() ?? 0,
+        (box['top'] as num?)?.toDouble() ?? 0,
+        (box['width'] as num?)?.toDouble() ?? 0,
+        (box['height'] as num?)?.toDouble() ?? 0,
+      ),
+      confidence: (json['confidence'] as num?)?.toDouble() ?? 1.0,
+    );
+  }
+
   @override
   String toString() => 'OcrBlock("$text", $boundingBox)';
 }

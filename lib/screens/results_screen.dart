@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/spec_item.dart';
 import '../models/diff_result.dart';
 import '../logic/phrase.dart';
@@ -15,6 +17,66 @@ class ResultsScreen extends StatelessWidget {
     required this.observed,
     required this.result,
   });
+
+  void _showJsonDialog(BuildContext context) {
+    final encoder = const JsonEncoder.withIndent('  ');
+    final jsonMap = {
+      'is_match': result.isMatch,
+      'discrepancy_count': result.count,
+      'expected_spec': expected.map((e) => e.toJson()).toList(),
+      'observed_assembly': observed.map((o) => o.toJson()).toList(),
+      'discrepancies': {
+        'missing': result.missing.map((d) => {'position': d.position, 'expected': d.expected}).toList(),
+        'unexpected': result.unexpected.map((d) => {'position': d.position, 'found': d.found}).toList(),
+        'mismatched': result.mismatched.map((d) => {'position': d.position, 'expected': d.expected, 'found': d.found}).toList(),
+        'unread': result.unread.map((d) => {'position': d.position, 'expected': d.expected}).toList(),
+      },
+    };
+    final jsonString = encoder.convert(jsonMap);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.data_object_rounded, color: Color(0xFF4F46E5)),
+            SizedBox(width: 8),
+            Text('Verification JSON Data'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              jsonString,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                color: Color(0xFF1E293B),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: jsonString));
+              Navigator.pop(dialogContext);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Verification JSON copied to clipboard!')),
+              );
+            },
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            label: const Text('Copy JSON'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Color _getColor(DiffType type) {
     switch (type) {
@@ -103,6 +165,11 @@ class ResultsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Verification Results'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.data_object_rounded),
+            onPressed: () => _showJsonDialog(context),
+            tooltip: 'View Extracted JSON',
+          ),
           IconButton(
             icon: const Icon(Icons.share),
             onPressed: () => _exportReport(context),

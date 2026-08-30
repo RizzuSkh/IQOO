@@ -291,4 +291,69 @@ void main() {
       },
     );
   });
+
+  group('Circuit breaker, diagram models & JSON conversion', () {
+    test('extracts position P1 and ampere value 16A from merged single block', () {
+      final result = parseBlocks([
+        block('P1 16A', 60, 100),
+      ]);
+      expect(result.items, hasLength(1));
+      expect(result.items.single.position, 'P1');
+      expect(result.items.single.component, '16A');
+    });
+
+    test('extracts required 16A rating from noisy circuit breaker text', () {
+      final result = parseBlocks([
+        block('CB1', 60, 100),
+        block('16A 240V AC 50Hz IEC/EN 60898-1 Schneider Electric', 200, 100),
+      ]);
+      expect(result.items, hasLength(1));
+      expect(result.items.single.position, 'CB1');
+      expect(result.items.single.component, '16A');
+    });
+
+    test('extracts C16 curve rating from circuit breaker text', () {
+      final result = parseBlocks([
+        block('P1: C16 415V 6000A', 60, 100),
+      ]);
+      expect(result.items, hasLength(1));
+      expect(result.items.single.position, 'P1');
+      expect(result.items.single.component, 'C16');
+    });
+
+    test('supports circuit diagram designation codes (CB1, Q1, F1, SW1)', () {
+      final result = parseBlocks([
+        block('CB1 16A', 60, 100),
+        block('Q1 32A', 60, 200),
+        block('F1 10A', 60, 300),
+      ]);
+      expect(result.items.map((i) => '${i.position}:${i.component}').toList(), [
+        'CB1:16A',
+        'Q1:32A',
+        'F1:10A',
+      ]);
+    });
+
+    test('converts OCR blocks directly to structured JSON maps', () {
+      final blocks = [
+        block('P1 16A', 60, 100),
+        block('P2 32A', 60, 200),
+      ];
+      final jsonList = parseBlocksToJson(blocks);
+      expect(jsonList, [
+        {'position': 'P1', 'component': '16A', 'confidence': 1.0},
+        {'position': 'P2', 'component': '32A', 'confidence': 1.0},
+      ]);
+    });
+
+    test('ParseResult JSON serialization roundtrip', () {
+      final original = parseBlocks([
+        block('P1 16A', 60, 100),
+      ]);
+      final jsonMap = original.toJson();
+      final reconstructed = ParseResult.fromJson(jsonMap);
+      expect(reconstructed.items.single.position, 'P1');
+      expect(reconstructed.items.single.component, '16A');
+    });
+  });
 }

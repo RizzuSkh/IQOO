@@ -35,6 +35,20 @@ class SpecItem {
     );
   }
 
+  /// Converts this [SpecItem] into a JSON map.
+  Map<String, dynamic> toJson() => {
+        'position': position,
+        'component': component,
+        'confidence': confidence,
+      };
+
+  /// Creates a [SpecItem] from a JSON map.
+  factory SpecItem.fromJson(Map<String, dynamic> json) => SpecItem(
+        position: json['position'] as String? ?? '',
+        component: json['component'] as String? ?? '',
+        confidence: (json['confidence'] as num?)?.toDouble() ?? 1.0,
+      );
+
   @override
   String toString() =>
       'SpecItem($position, "$component", ${confidence.toStringAsFixed(2)})';

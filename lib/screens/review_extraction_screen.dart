@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/spec_item.dart';
 import 'results_screen.dart';
 import '../logic/compare.dart';
@@ -185,11 +187,74 @@ class _ReviewExtractionScreenState extends State<ReviewExtractionScreen> {
     );
   }
 
+  void _showJsonDialog() {
+    final encoder = const JsonEncoder.withIndent('  ');
+    final expectedJson = _expected.map((item) => item.toJson()).toList();
+    final observedJson = _observed.map((item) => item.toJson()).toList();
+    final combinedJson = {
+      'expected_spec': expectedJson,
+      'observed_assembly': observedJson,
+    };
+    final jsonString = encoder.convert(combinedJson);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.data_object_rounded, color: Color(0xFF4F46E5)),
+            SizedBox(width: 8),
+            Text('Extracted JSON Data'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              jsonString,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                color: Color(0xFF1E293B),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: jsonString));
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('JSON copied to clipboard!')),
+              );
+            },
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            label: const Text('Copy JSON'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(title: const Text('Review Extraction')),
+      appBar: AppBar(
+        title: const Text('Review Extraction'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.data_object_rounded),
+            tooltip: 'View Extracted JSON',
+            onPressed: _showJsonDialog,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(

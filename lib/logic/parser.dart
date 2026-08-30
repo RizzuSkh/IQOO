@@ -9,48 +9,40 @@ import 'ocr.dart';
 ///
 /// Pure and deterministic — no model, no network, no I/O.
 
-/// A position label the parser accepts: an optional "P" prefix, then 1-3
-/// digits. Matches both "P1" (PRD section 17's example) and a bare "1" — the
-/// team's actual verified Bill of Materials (Breadboard_Bill_of_Materials.pdf)
-/// uses bare numbers in its POSITION column, not "P1" style, and the parser
-/// used to reject every one of them, sending the whole document to
-/// unparsedRows regardless of photo quality or crop.
-///
-/// Capped at 3 digits on purpose: a real distribution board prints its own
-/// electrical ratings as bare numbers too — "6000" (breaking capacity in
-/// amps), "10000" — and an uncapped pattern happily accepted those as
-/// "position 6000", a real board's own spec text quietly becoming wrong
-/// data instead of being rejected. No assembly in this project's scope has
-/// anywhere near 1000 positions, so this loses nothing real.
-final RegExp _positionPattern = RegExp(r'^P?\d{1,3}$');
+/// Extended position pattern supporting P1, CB1, Q1, F1, SW1, L1, or bare digits (capped at 3 digits).
+final RegExp _positionPattern = RegExp(
+  r'^(P|CB|Q|F|SW|L|POS|POSITION)?\s*[:#\-\=]?\s*\d{1,3}$',
+  caseSensitive: false,
+);
+
+/// Pattern to match leading position in combined text blocks (e.g. "P1 16A" or "CB1: 16A 240V").
+final RegExp _combinedPositionPattern = RegExp(
+  r'^(P|CB|Q|F|SW|L|POS|POSITION)?\s*[:#\-\=]?\s*(\d{1,3})\b',
+  caseSensitive: false,
+);
 
 /// A breaker/MCB rating code: an IEC 60898 curve letter (B, C, D — the
 /// common residential/commercial trip curves — plus K and Z for specialised
-/// breakers) followed by the current rating, with or without the space OCR
-/// sometimes keeps ("C32" and "C 32" both occur on real printed labels), and
-/// an optional trailing "A" for amps.
-///
-/// This is what [parseBreakerRow] looks for when a photograph has no printed
-/// position numbers at all — which is the normal case for a real breaker
-/// panel. Manufacturers print the rating on the breaker; they do not print
-/// "position 1, position 2..." anywhere. That numbering only exists in the
-/// specification document, so on the assembly side it has to come from
-/// left-to-right reading order instead.
-final RegExp _ratingPattern = RegExp(r'^[BCDKZ]\s?\d{1,3}A?$');
-
-/// Text that looks numeric or spec-like but is not a rating: the rest of
-/// what's actually printed on a breaker alongside its curve/current code —
-/// breaking capacity ("6000", "10000"), voltage ("230/400V~", "240/415V~"),
-/// pole markings ("1 3", "2 4"), bare pole counts ("3"). None of this is
-/// wrong to read — it just is not the field the comparison cares about, and
-/// folding it into the component text is exactly the "unwanted things"
-/// problem the project already fixed once for incidental row noise.
+/// breakers) followed by the current rating.
+final RegExp _ratingPattern = RegExp(r'^[BCDKZ]\s?\d{1,3}A?$', caseSensitive: false);
 
 /// Trailing punctuation OCR commonly appends to a label, e.g. "P1:" or "P1.".
 final RegExp _trailingPunctuation = RegExp(r'[:.,;\-–—]+$');
 
 /// Runs of whitespace, including the newlines ML Kit puts between block lines.
 final RegExp _whitespaceRun = RegExp(r'\s+');
+
+/// Specific rating and component patterns to extract only required values (e.g. 16A, C16, NE555).
+final RegExp _amperePattern = RegExp(r'\b\d+\s*A(?:MP)?\b', caseSensitive: false);
+final RegExp _breakerCurvePattern = RegExp(r'\b[B-D]\d+\b', caseSensitive: false);
+final RegExp _polesPattern = RegExp(r'\b(DP|SP|TP|TPN|4P|2P|1P)\b', caseSensitive: false);
+final RegExp _icPartPattern = RegExp(r'\b[A-Z]{1,4}\d{2,5}[A-Z]*\b', caseSensitive: false);
+
+/// Common electrical & standards noise words to strip out when cleaning component text.
+final RegExp _noiseWords = RegExp(
+  r'\b(\d+V|\d+HZ|50/60HZ|\d+KA|\d+A(?=00)|AC|DC|IEC\d*|EN\d*|CE|MADE IN \w+|SCHNEIDER|HAVELLS|ABB|SIEMENS|LEGRAND)\b',
+  caseSensitive: false,
+);
 
 /// The outcome of parsing one photograph's blocks.
 ///
@@ -65,13 +57,6 @@ class ParseResult {
 
   /// Text ML Kit found sharing a row with a real item, past the component,
   /// that was NOT folded into that item's component text.
-  ///
-  /// A real breadboard carries incidental text at the same height as a label —
-  /// column numbers, resistor colour codes, part date codes — and none of it
-  /// belongs in the component field. Surfacing it here (rather than silently
-  /// discarding it, and rather than the old behaviour of appending it to the
-  /// component) lets the capture screen tell the operator "N extra blocks
-  /// ignored" instead of shipping a corrupted component string.
   final List<String> ignoredNoise;
 
   /// True when [items]' positions were not read from the photo at all, but
@@ -95,25 +80,55 @@ class ParseResult {
   /// True when some text was recognised but no row parsed cleanly.
   bool get needsCorrection => unparsedRows.isNotEmpty;
 
+  /// Converts this [ParseResult] into a JSON map.
+  Map<String, dynamic> toJson() => {
+        'items': items.map((i) => i.toJson()).toList(),
+        'unparsedRows': unparsedRows,
+        'ignoredNoise': ignoredNoise,
+      };
+
+  /// Creates a [ParseResult] from a JSON map.
+  factory ParseResult.fromJson(Map<String, dynamic> json) => ParseResult(
+        items: (json['items'] as List<dynamic>?)
+                ?.map((e) => SpecItem.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [],
+        unparsedRows: (json['unparsedRows'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [],
+        ignoredNoise: (json['ignoredNoise'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [],
+      );
+
   @override
   String toString() =>
       'ParseResult(${items.length} items, ${unparsedRows.length} unparsed, '
       '${ignoredNoise.length} noise)';
 }
 
+/// Converts raw OCR blocks into a JSON representation of extracted spec items.
+///
+/// Converts OCR text blocks into a structured JSON list of objects containing
+/// position labels, extracted component values, and confidence scores.
+List<Map<String, dynamic>> parseBlocksToJson(List<OcrBlock> blocks) {
+  final parseResult = parseBlocks(blocks);
+  return parseResult.items.map((item) => item.toJson()).toList();
+}
+
+/// Helper container for split position and component values.
+class _ExtractedItem {
+  final String position;
+  final String component;
+  const _ExtractedItem(this.position, this.component);
+}
+
 /// Parses OCR [blocks] into spec items by their positions on the page.
 ///
-/// Blocks are grouped into rows using a tolerance of half the median block
-/// height, ordered left to right within each row, then read as
-/// `position, component`. A row with only a position yields an empty component,
-/// which downstream is reported as unread and never as a match.
-///
-/// A row holding more than two blocks takes only the second as the component;
-/// anything past that is incidental text sharing the row's height (a breadboard
-/// column number, a resistor colour code, a chip date code) and is reported in
-/// [ParseResult.ignoredNoise] rather than appended to the component. Appending
-/// it used to silently corrupt the component string — this is why "unwanted
-/// things" showed up in extracted components on real photographs.
+/// Supports separate position/component blocks, single merged blocks (e.g. "P1 16A"),
+/// circuit breaker models, and circuit diagrams.
 ParseResult parseBlocks(List<OcrBlock> blocks) {
   final usable = blocks
       .where((block) => _flatten(block.text).isNotEmpty)
@@ -129,24 +144,53 @@ ParseResult parseBlocks(List<OcrBlock> blocks) {
   for (final row in groupIntoRows(usable)) {
     row.sort((a, b) => a.left.compareTo(b.left));
 
-    final label = _asPosition(_flatten(row.first.text));
-    if (label == null) {
-      unparsedRows.add(row.map((block) => _flatten(block.text)).join(' '));
+    if (row.length == 1) {
+      final blockText = _flatten(row.first.text);
+      final extracted = _extractPositionAndComponent(blockText);
+      if (extracted != null) {
+        items.add(
+          SpecItem(
+            position: extracted.position,
+            component: extracted.component,
+            confidence: row.first.confidence,
+          ),
+        );
+      } else {
+        unparsedRows.add(blockText);
+      }
       continue;
     }
 
-    final component = row.length > 1 ? _flatten(row[1].text) : '';
-    if (row.length > 2) {
-      ignoredNoise.addAll(row.skip(2).map((block) => _flatten(block.text)));
-    }
+    // Row with 2 or more blocks
+    final firstText = _flatten(row.first.text);
+    final firstExtracted = _extractPositionAndComponent(firstText);
 
-    items.add(
-      SpecItem(
-        position: label,
-        component: component,
-        confidence: _meanConfidence(row.take(2)),
-      ),
-    );
+    if (firstExtracted != null) {
+      String label = firstExtracted.position;
+      String component = firstExtracted.component;
+
+      if (component.isEmpty) {
+        // First block had only position, second block has component
+        component = _cleanComponentValue(_flatten(row[1].text));
+        if (row.length > 2) {
+          ignoredNoise.addAll(row.skip(2).map((block) => _flatten(block.text)));
+        }
+      } else {
+        // First block contained both position & component (e.g. "P1 16A")
+        // Remaining blocks in row are noise
+        ignoredNoise.addAll(row.skip(1).map((block) => _flatten(block.text)));
+      }
+
+      items.add(
+        SpecItem(
+          position: label,
+          component: component,
+          confidence: _meanConfidence(row.take(2)),
+        ),
+      );
+    } else {
+      unparsedRows.add(row.map((block) => _flatten(block.text)).join(' '));
+    }
   }
 
   if (items.isNotEmpty) {
@@ -246,10 +290,6 @@ ParseResult parseBreakerRow(List<OcrBlock> blocks) {
 }
 
 /// Groups [blocks] into rows by Y-centre, top to bottom.
-///
-/// The row tolerance is half the median block height, so it adapts to the
-/// resolution of the photograph rather than assuming a pixel size. Exposed for
-/// testing.
 List<List<OcrBlock>> groupIntoRows(List<OcrBlock> blocks) {
   if (blocks.isEmpty) return [];
 
@@ -325,6 +365,88 @@ double medianWidth(List<OcrBlock> blocks) {
   return (widths[middle - 1] + widths[middle]) / 2;
 }
 
+/// Extracts position label and component candidate from a single text block.
+_ExtractedItem? _extractPositionAndComponent(String text) {
+  final flat = _flatten(text);
+  if (flat.isEmpty) return null;
+
+  final purePos = _asPosition(flat);
+  if (purePos != null) {
+    return _ExtractedItem(purePos, '');
+  }
+
+  final match = _combinedPositionPattern.firstMatch(flat);
+  if (match != null) {
+    final fullPosStr = match.group(0)!;
+    final posLabel = _asPosition(fullPosStr);
+    if (posLabel != null) {
+      final hasRealPrefix = match.group(1) != null && match.group(1)!.isNotEmpty;
+      final remainder = flat.substring(match.end).trim();
+
+      // For bare-digit positions in combined blocks, only accept the match
+      // if the remainder contains a recognisable component value (ampere,
+      // curve, IC, poles). This prevents pole markings like "1  3" or
+      // "2  4" from being misread as position + component.
+      if (hasRealPrefix || _hasRecognisableComponent(remainder)) {
+        final cleanedComp = _cleanComponentValue(remainder);
+        return _ExtractedItem(posLabel, cleanedComp);
+      }
+    }
+  }
+
+  return null;
+}
+
+/// Cleans raw text to extract ONLY the required component / ampere rating value.
+String _cleanComponentValue(String rawText) {
+  final trimmed = _flatten(rawText);
+  if (trimmed.isEmpty) return '';
+
+  // 1. Try Breaker curve pattern (e.g. "C16", "B16", "C32")
+  final curveMatch = _breakerCurvePattern.firstMatch(trimmed);
+  if (curveMatch != null) {
+    return curveMatch.group(0)!.toUpperCase();
+  }
+
+  // 2. Try explicit Ampere pattern (e.g. "16A", "16 A", "10A", "32A")
+  final ampMatch = _amperePattern.firstMatch(trimmed);
+  if (ampMatch != null) {
+    return ampMatch.group(0)!.toUpperCase().replaceAll(' ', '');
+  }
+
+  // 3. Try IC / electronic part pattern (e.g. "NE555", "7805", "LM358")
+  final icMatch = _icPartPattern.firstMatch(trimmed);
+  if (icMatch != null) {
+    return icMatch.group(0)!.toUpperCase();
+  }
+
+  // 4. Try Poles pattern (e.g. "DP", "SP", "TP")
+  final polesMatch = _polesPattern.firstMatch(trimmed);
+  if (polesMatch != null) {
+    return polesMatch.group(0)!.toUpperCase();
+  }
+
+  // Fallback: strip noise words and trailing punctuation
+  final cleaned = trimmed
+      .replaceAll(_noiseWords, '')
+      .replaceAll(_trailingPunctuation, '')
+      .trim();
+  return cleaned;
+}
+
+/// Returns true when [text] contains at least one token recognisable as a
+/// component value: an ampere rating, a breaker curve code, an IC/electronic
+/// part number, or a pole designation. Used to guard bare-digit positions in
+/// combined blocks — without a known prefix like "P" or "CB", we only split
+/// a merged block if the remainder actually looks like a component.
+bool _hasRecognisableComponent(String text) {
+  if (text.isEmpty) return false;
+  return _amperePattern.hasMatch(text) ||
+      _breakerCurvePattern.hasMatch(text) ||
+      _icPartPattern.hasMatch(text) ||
+      _polesPattern.hasMatch(text);
+}
+
 /// Returns [text] as a normalised position label, or null if it is not one.
 String? _asPosition(String text) {
   final candidate = text
@@ -349,8 +471,7 @@ String? _asRating(String text) {
 /// Collapses newlines and repeated spaces so block text is a single line.
 String _flatten(String text) => text.replaceAll(_whitespaceRun, ' ').trim();
 
-/// Mean OCR confidence across [row]. Ignored-noise blocks are excluded by the
-/// caller, so this reflects only the position and component that were kept.
+/// Mean OCR confidence across [row].
 double _meanConfidence(Iterable<OcrBlock> row) {
   final confidences = row.map((block) => block.confidence).toList();
   return confidences.reduce((a, b) => a + b) / confidences.length;
