@@ -351,32 +351,36 @@ class _ReviewExtractionScreenState extends State<ReviewExtractionScreen> {
             ],
           ),
         ),
-        if (unparsed.isNotEmpty || noise.isNotEmpty)
-          _diagnostics(
-            unparsed: unparsed,
-            noise: noise,
-            isExpected: isExpected,
-          ),
         Expanded(
-          child: items.isEmpty
-              ? Center(
-                  child: Text(
-                    'No items detected — tap + to add one',
-                    style: TextStyle(color: Colors.grey.shade500),
+          child: ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            children: [
+              if (unparsed.isNotEmpty || noise.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _diagnostics(
+                    unparsed: unparsed,
+                    noise: noise,
+                    isExpected: isExpected,
+                  ),
+                ),
+              if (items.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: Text(
+                      'No items detected — tap + to add one',
+                      style: TextStyle(color: Colors.grey.shade500),
+                    ),
                   ),
                 )
-              : ListView.separated(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: 16,
-                  ),
-                  itemCount: items.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    final isUnread = item.isUnread;
-                    return Container(
+              else
+                ...List.generate(items.length, (index) {
+                  final item = items[index];
+                  final isUnread = item.isUnread;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Container(
                       decoration: BoxDecoration(
                         color: isUnread
                             ? const Color(0xFFFFFBEB)
@@ -460,9 +464,11 @@ class _ReviewExtractionScreenState extends State<ReviewExtractionScreen> {
                           ],
                         ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                }),
+            ],
+          ),
         ),
       ],
     );
