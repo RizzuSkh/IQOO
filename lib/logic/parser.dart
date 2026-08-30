@@ -65,6 +65,13 @@ final RegExp _leadingRatingPattern = RegExp(
   caseSensitive: false,
 );
 
+/// A rating code appearing ANYWHERE in a text block. Used to extract ratings
+/// from noisy physical breaker blocks (e.g. "Schneider C16 240V").
+final RegExp _anywhereRatingPattern = RegExp(
+  r'\b([BCDKZ]\s?\d{1,3}A?|\d{1,3}\s?A(?:MP)?)(?:\s+(DP|SP|TP|TPN|4P|2P|1P))?(?:\s+(RCBO|MCB|RCCB|RCD|ELCB|ISOLATOR))?\b',
+  caseSensitive: false,
+);
+
 /// The outcome of parsing one photograph's blocks.
 ///
 /// Rows the parser could not read as a position are kept in [unparsedRows]
@@ -587,8 +594,15 @@ String? _asRating(String text) {
       .toUpperCase()
       .replaceAll(_trailingPunctuation, '')
       .trim();
-  if (!_ratingPattern.hasMatch(candidate)) return null;
-  return candidate.replaceAll(' ', '');
+  
+  // Use the comprehensive anywhereRatingPattern instead of a strict full-string match
+  // so we can extract the rating even if there's noise around it in the same block.
+  final match = _anywhereRatingPattern.firstMatch(candidate);
+  if (match == null) return null;
+  
+  final baseRating = match.group(1)!;
+  final normalisedBase = baseRating.replaceAll(' ', '');
+  return match.group(0)!.trim().replaceFirst(baseRating, normalisedBase);
 }
 
 /// Collapses newlines and repeated spaces so block text is a single line.
