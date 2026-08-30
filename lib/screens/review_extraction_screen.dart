@@ -281,31 +281,50 @@ class _ReviewExtractionScreenState extends State<ReviewExtractionScreen> {
                   itemCount: items.length,
                   itemBuilder: (context, index) {
                     final item = items[index];
-                    return ListTile(
-                      leading: CircleAvatar(child: Text(item.position)),
-                      title: Text(
-                        item.component.isEmpty ? '<unread>' : item.component,
-                      ),
-                      subtitle: Text(
-                        'Confidence: ${(item.confidence * 100).toInt()}%',
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit),
-                            onPressed: () => _editItem(index, isExpected),
-                          ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.red,
+                    final isUnread = item.isUnread;
+                    // PRD section 23: an unread component must be visibly
+                    // flagged, never treated as though it matched.
+                    return Container(
+                      color: isUnread ? Colors.amber.shade50 : null,
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: isUnread
+                              ? Colors.amber.shade200
+                              : null,
+                          child: Text(item.position),
+                        ),
+                        title: Text(
+                          isUnread ? 'Unread — needs a value' : item.component,
+                          style: isUnread
+                              ? TextStyle(
+                                  color: Colors.amber.shade900,
+                                  fontStyle: FontStyle.italic,
+                                )
+                              : null,
+                        ),
+                        subtitle: Text(
+                          isUnread
+                              ? 'OCR could not read this — tap to enter it manually'
+                              : 'Confidence: ${(item.confidence * 100).toInt()}%',
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit),
+                              onPressed: () => _editItem(index, isExpected),
                             ),
-                            onPressed: () => _deleteItem(index, isExpected),
-                          ),
-                        ],
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                              ),
+                              onPressed: () => _deleteItem(index, isExpected),
+                            ),
+                          ],
+                        ),
+                        onTap: () => _editItem(index, isExpected),
                       ),
-                      onTap: () => _editItem(index, isExpected),
                     );
                   },
                 ),

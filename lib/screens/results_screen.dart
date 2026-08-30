@@ -43,19 +43,28 @@ class ResultsScreen extends StatelessWidget {
   }
 
   Future<void> _exportReport(BuildContext context) async {
-    final summary = await generateReport(
+    final report = await generateReport(
       expected: expected,
       observed: observed,
       result: result,
     );
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Report saved and copied to clipboard:\n$summary'),
-        ),
-      );
-    }
+    if (!context.mounted) return;
+
+    // Tell the truth about the file write (PRD section 23) instead of
+    // always claiming "saved" — the clipboard write happens either way.
+    final message = report.fileSaved
+        ? 'Report saved to app storage and summary copied to clipboard.'
+        : "Couldn't save the report file (${report.fileError ?? 'unknown error'}), "
+              'but the summary is on the clipboard.';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: report.fileSaved ? null : Colors.orange.shade800,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   @override

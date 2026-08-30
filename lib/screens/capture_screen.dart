@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/spec_item.dart';
 import '../logic/ocr.dart';
 import '../logic/parser.dart';
@@ -23,12 +25,26 @@ class CaptureScreen extends StatefulWidget {
   final List<String> previousExpectedUnparsed;
   final List<String> previousExpectedNoise;
 
+  /// Bundled asset path to load instead of opening the camera. Used by the
+  /// Home screen's "Run Demo Sample" fallback (CLAUDE.md section 21's
+  /// recorded-backup-demo requirement) so a presenter can run the full
+  /// pipeline on stage without depending on live camera/lighting, and so the
+  /// real on-device OCR path can be exercised without any picker at all.
+  /// Null in normal use.
+  final String? assetOverride;
+
+  /// The assembly-step asset to chain to when [assetOverride] was used for
+  /// the spec step. Ignored in normal use.
+  final String? nextAssetOverride;
+
   const CaptureScreen({
     super.key,
     required this.mode,
     this.previousExpected,
     this.previousExpectedUnparsed = const [],
     this.previousExpectedNoise = const [],
+    this.assetOverride,
+    this.nextAssetOverride,
   });
 
   @override
@@ -50,13 +66,63 @@ class _CaptureScreenState extends State<CaptureScreen> {
   double _vInset = 0.0; // fraction trimmed from top AND bottom
 
   ParseResult _parseResult = const ParseResult(items: [], unparsedRows: []);
-  String _status = '';
+  int _blocksRead = 0;
   String _error = '';
+  bool _loadingAsset = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.assetOverride != null) {
+      // Demo-sample mode: load the bundled asset and run OCR immediately,
+      // no camera/gallery/crop step needed — it's already framed correctly.
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _loadAsset(widget.assetOverride!),
+      );
+    }
+  }
 
   @override
   void dispose() {
     _ocrReader.close();
     super.dispose();
+  }
+
+  /// Copies a bundled asset to a real file (ML Kit needs a file path, not an
+  /// asset bundle key) and runs it straight through OCR.
+  Future<void> _loadAsset(String assetPath) async {
+    setState(() {
+      _loadingAsset = true;
+      _error = '';
+    });
+    try {
+      final bytes = await rootBundle.load(assetPath);
+      final tempDir = await getTemporaryDirectory();
+      final fileName = assetPath.split('/').last;
+      final file = File('${tempDir.path}/demo_$fileName');
+      await file.writeAsBytes(
+        bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
+      );
+
+      final dims = await readImageDimensions(file.path);
+      if (!mounted) return;
+      setState(() {
+        _imageFile = file;
+        _imageWidth = dims.width;
+        _imageHeight = dims.height;
+        _hInset = 0.0;
+        _vInset = 0.0;
+        _loadingAsset = false;
+      });
+      await _runOcr(useFullPhoto: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingAsset = false;
+        _stage = _Stage.idle;
+        _error = 'Could not load the demo sample: $e';
+      });
+    }
   }
 
   Future<void> _takePhoto() async {
@@ -79,7 +145,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
         _vInset = 0.0;
         _stage = _Stage.cropping;
         _error = '';
-        _status = '';
         _parseResult = const ParseResult(items: [], unparsedRows: []);
       });
     } catch (e) {
@@ -121,18 +186,9 @@ class _CaptureScreenState extends State<CaptureScreen> {
       if (!mounted) return;
       setState(() {
         _parseResult = parseResult;
+        _blocksRead = blocks.length;
         _stage = _Stage.done;
-        final noiseNote = parseResult.ignoredNoise.isEmpty
-            ? ''
-            : ', ${parseResult.ignoredNoise.length} stray text block(s) ignored';
-        _status =
-            '${blocks.length} text blocks read, '
-            '${parseResult.items.length} row(s) parsed$noiseNote.';
-        if (parseResult.isEmpty) {
-          _error =
-              'No valid labels found (expected P1, P2, etc.). '
-              'Retake with the label sheet filling more of the frame, or crop tighter.';
-        }
+        _error = _diagnose(blocks.length, parseResult);
       });
     } catch (e) {
       if (!mounted) return;
@@ -143,14 +199,42 @@ class _CaptureScreenState extends State<CaptureScreen> {
     }
   }
 
+  /// Explains what OCR actually did and what to do next, rather than a
+  /// generic "not found" message. Returns '' when the capture is clean.
+  String _diagnose(int blocksRead, ParseResult result) {
+    if (blocksRead == 0) {
+      return 'No text was detected in this photo at all. Check focus and '
+          'lighting, make sure the label sheet fills the frame, then retake.';
+    }
+    if (result.items.isEmpty) {
+      final sample = result.unparsedRows.isNotEmpty
+          ? ' First line read: "${result.unparsedRows.first}".'
+          : '';
+      return 'Found $blocksRead block(s) of text, but none started with a '
+          'position label like "1" or "P1".$sample You can still tap Next '
+          'and add rows by hand on the next screen, or Retake and crop '
+          'tighter around just the position and component columns.';
+    }
+    if (result.unparsedRows.isNotEmpty) {
+      return 'Parsed ${result.items.length} row(s). ${result.unparsedRows.length} '
+          'more line(s) did not match a position and are listed on the next '
+          "screen — add them manually if they're real rows.";
+    }
+    return '';
+  }
+
   void _retake() {
     setState(() {
       _imageFile = null;
       _stage = _Stage.idle;
       _error = '';
-      _status = '';
       _parseResult = const ParseResult(items: [], unparsedRows: []);
     });
+    // Demo-sample screens have no camera to fall back to — reload the same
+    // asset rather than stranding the operator on an unusable idle screen.
+    if (widget.assetOverride != null) {
+      _loadAsset(widget.assetOverride!);
+    }
   }
 
   void _proceed() {
@@ -163,6 +247,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
             previousExpected: _parseResult.items,
             previousExpectedUnparsed: _parseResult.unparsedRows,
             previousExpectedNoise: _parseResult.ignoredNoise,
+            assetOverride: widget.nextAssetOverride,
           ),
         ),
       );
@@ -189,9 +274,22 @@ class _CaptureScreenState extends State<CaptureScreen> {
     final isSpec = widget.mode == CaptureMode.spec;
     final title = isSpec ? 'Capture Specification' : 'Capture Assembly';
     final accent = isSpec ? Colors.blue : Colors.green;
+    final isDemo = widget.assetOverride != null;
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        title: Text(title),
+        actions: [
+          if (isDemo)
+            const Padding(
+              padding: EdgeInsets.only(right: 12),
+              child: Chip(
+                label: Text('DEMO SAMPLE', style: TextStyle(fontSize: 11)),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+        ],
+      ),
       body: Column(
         children: [
           Container(
@@ -232,10 +330,22 @@ class _CaptureScreenState extends State<CaptureScreen> {
           Expanded(child: _body(accent)),
           if (_error.isNotEmpty)
             Container(
-              padding: const EdgeInsets.all(8),
-              color: Colors.red.shade100,
+              padding: const EdgeInsets.all(12),
+              color: Colors.amber.shade100,
               width: double.infinity,
-              child: Text(_error, style: const TextStyle(color: Colors.red)),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.info_outline, size: 18, color: Colors.brown),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _error,
+                      style: const TextStyle(color: Colors.brown, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
             ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -247,6 +357,19 @@ class _CaptureScreenState extends State<CaptureScreen> {
   }
 
   Widget _body(MaterialColor accent) {
+    if (_loadingAsset) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading demo sample...'),
+          ],
+        ),
+      );
+    }
+
     if (_stage == _Stage.processing) {
       return const Center(
         child: Column(
@@ -254,21 +377,28 @@ class _CaptureScreenState extends State<CaptureScreen> {
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Processing OCR...'),
+            Text('Reading text on-device (ML Kit)...'),
           ],
         ),
       );
     }
 
     if (_imageFile == null) {
+      final isDemo = widget.assetOverride != null;
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.camera_alt, size: 80, color: Colors.grey.shade400),
+            Icon(
+              isDemo ? Icons.play_circle_outline : Icons.camera_alt,
+              size: 80,
+              color: Colors.grey.shade400,
+            ),
             const SizedBox(height: 16),
             Text(
-              'Tap the button below to take a photo',
+              isDemo
+                  ? 'Tap the button below to reload the demo sample'
+                  : 'Tap the button below to take a photo',
               style: TextStyle(color: Colors.grey.shade600),
             ),
           ],
@@ -300,8 +430,13 @@ class _CaptureScreenState extends State<CaptureScreen> {
                         padding: const EdgeInsets.all(8),
                         color: Colors.black.withValues(alpha: 0.7),
                         child: Text(
-                          'Extracted ${_parseResult.items.length} item(s)',
-                          style: const TextStyle(color: Colors.white),
+                          '$_blocksRead text block(s) read -> '
+                          '${_parseResult.items.length} row(s) parsed'
+                          '${_parseResult.ignoredNoise.isEmpty ? '' : ', ${_parseResult.ignoredNoise.length} ignored as noise'}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -312,11 +447,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
           ),
         ),
         if (_stage == _Stage.cropping) _cropControls(accent),
-        if (_stage == _Stage.done && _status.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Text(_status, style: Theme.of(context).textTheme.bodySmall),
-          ),
         if (_stage == _Stage.done && _parseResult.items.isNotEmpty)
           _itemsPreview(),
       ],
@@ -362,16 +492,13 @@ class _CaptureScreenState extends State<CaptureScreen> {
             ),
           ),
           Positioned.fill(
-            child: FractionalTranslation(
-              translation: Offset.zero,
-              child: Align(
-                child: FractionallySizedBox(
-                  widthFactor: (1 - 2 * _hInset).clamp(0.0, 1.0),
-                  heightFactor: (1 - 2 * _vInset).clamp(0.0, 1.0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.amberAccent, width: 2),
-                    ),
+            child: Align(
+              child: FractionallySizedBox(
+                widthFactor: (1 - 2 * _hInset).clamp(0.0, 1.0),
+                heightFactor: (1 - 2 * _vInset).clamp(0.0, 1.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.amberAccent, width: 2),
                   ),
                 ),
               ),
@@ -484,13 +611,20 @@ class _CaptureScreenState extends State<CaptureScreen> {
   }
 
   Widget _actions(MaterialColor accent, bool isSpec) {
+    if (_loadingAsset) {
+      return const SizedBox.shrink();
+    }
+
     if (_stage == _Stage.idle || _imageFile == null) {
+      final isDemo = widget.assetOverride != null;
       return SizedBox(
         width: double.infinity,
         child: ElevatedButton.icon(
-          onPressed: _takePhoto,
-          icon: const Icon(Icons.camera),
-          label: const Text('Take Photo'),
+          onPressed: isDemo
+              ? () => _loadAsset(widget.assetOverride!)
+              : _takePhoto,
+          icon: Icon(isDemo ? Icons.play_circle_outline : Icons.camera),
+          label: Text(isDemo ? 'Reload Demo Sample' : 'Take Photo'),
           style: ElevatedButton.styleFrom(
             backgroundColor: accent,
             foregroundColor: Colors.white,

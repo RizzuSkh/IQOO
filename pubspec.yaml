@@ -24,3 +24,14 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Bundled sample images for the "Run Demo Sample" fallback path (no new
+  # package -- just declaring existing PNGs as assets). Two uses: lets the
+  # presenter run the full pipeline on stage without depending on live
+  # camera/lighting (CLAUDE.md section 21's "recorded backup demo"
+  # requirement), and gives a repeatable way to exercise the real on-device
+  # ML Kit text recognizer with zero picker/permission involvement.
+  assets:
+    - demo_assets/demo_spec_A.png
+    - demo_assets/demo_assembly_A_match.png
+    - demo_assets/demo_assembly_B_tampered.png

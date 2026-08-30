@@ -22,8 +22,42 @@ class ParityApp extends StatelessWidget {
   }
 }
 
+/// Bundled sample images for "Run Demo Sample" — see pubspec.yaml assets and
+/// CaptureScreen.assetOverride. Matches Breadboard_Bill_of_Materials.pdf
+/// (BB-01, Assembly A) exactly: position 1 NE555, 2 mismatched to LM358, 3
+/// missing, 4 an unauthorised part in the BOM's real spare slot.
+const String _demoSpecAsset = 'demo_assets/demo_spec_A.png';
+const String _demoAssemblyTamperedAsset =
+    'demo_assets/demo_assembly_B_tampered.png';
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
+
+  void _startLiveVerification(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CaptureScreen(mode: CaptureMode.spec),
+      ),
+    );
+  }
+
+  /// Runs the full pipeline against bundled sample images instead of the
+  /// camera — a stage-safety fallback (CLAUDE.md section 21: "recorded
+  /// backup demo") for when lighting or camera focus can't be trusted live,
+  /// and a way to demonstrate a real discrepancy without a physical board.
+  void _runDemoSample(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CaptureScreen(
+          mode: CaptureMode.spec,
+          assetOverride: _demoSpecAsset,
+          nextAssetOverride: _demoAssemblyTamperedAsset,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,107 +67,113 @@ class HomeScreen extends StatelessWidget {
         centerTitle: true,
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Logo/Icon
-            Icon(
-              Icons.compare_arrows,
-              size: 80,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            const SizedBox(height: 24),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 16),
+              Icon(
+                Icons.compare_arrows,
+                size: 80,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Assembly Verification',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Compare physical assembly to specification',
+                style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 48),
 
-            // Title
-            const Text(
-              'Assembly Verification',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: () => _startLiveVerification(context),
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Start Verification'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  textStyle: const TextStyle(fontSize: 18),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _runDemoSample(context),
+                icon: const Icon(Icons.play_circle_outline),
+                label: const Text('Run Demo Sample'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  textStyle: const TextStyle(fontSize: 15),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Runs the full pipeline on bundled sample images — a known-good '
+                'fallback if venue lighting or the camera can\'t be trusted live.',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
 
-            // Subtitle
-            Text(
-              'Compare physical assembly to specification',
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 48),
-
-            // Start button
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        const CaptureScreen(mode: CaptureMode.spec),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.offline_bolt, color: Colors.green),
+                          SizedBox(width: 8),
+                          Text(
+                            'Fully Offline',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'All OCR and comparison happens on device. No internet required.',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                    ],
                   ),
-                );
-              },
-              icon: const Icon(Icons.camera_alt),
-              label: const Text('Start Verification'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                textStyle: const TextStyle(fontSize: 18),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Info cards
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.offline_bolt, color: Colors.green),
-                        SizedBox(width: 8),
-                        Text(
-                          'Fully Offline',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'All OCR and comparison happens on device. No internet required.',
-                      style: TextStyle(color: Colors.grey.shade600),
-                    ),
-                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.speed, color: Colors.blue),
-                        SizedBox(width: 8),
-                        Text(
-                          'Fast Results',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Two photos, instant comparison. Reports what differs only.',
-                      style: TextStyle(color: Colors.grey.shade600),
-                    ),
-                  ],
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.speed, color: Colors.blue),
+                          SizedBox(width: 8),
+                          Text(
+                            'Fast Results',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Two photos, instant comparison. Reports what differs only.',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

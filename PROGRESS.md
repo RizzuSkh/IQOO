@@ -646,3 +646,107 @@ UI running. adb dropped the USB connection partway through re-verification
 (known flaky-cable/daemon issue, not an app issue) — a full real-camera
 end-to-end run against the corrected demo images is still the next concrete
 step once reconnected.
+
+## Session 6 — full audit, ML Kit fix confirmed on-device, "Run Demo Sample" feature
+
+User asked for a complete review: re-audit every file, find what's actually
+broken in ML Kit, improve UI/diagnostics, and produce a working build. Full
+outcome below — this is the session that finally proves OCR works.
+
+### The real fix, verified on the actual iQOO 15 target device
+
+Everything through Session 5 was reasoned-through and unit-tested but never
+confirmed with real ML Kit on real hardware. This session closes that gap
+safely: added a permanent **"Run Demo Sample"** feature (`main.dart` Home
+screen button, `CaptureScreen.assetOverride`) that bundles known-good images
+as Flutter assets (`pubspec.yaml`) and runs them through the exact same
+OCR → parser → compare → phrase → report pipeline as a live capture — with
+zero camera or gallery picker involved, so it's both a safe verification path
+and a legitimate stage-safety fallback (CLAUDE.md section 21's "recorded
+backup demo" requirement).
+
+**Ran the full pipeline live on the iQOO 15 (10BFCH1K9Y00237, I2501):**
+Home → Run Demo Sample → real ML Kit OCR on `demo_spec_A.png` ("7 text
+block(s) read -> 3 row(s) parsed", correctly diagnosing the heading line as
+unparsed) → Next → real ML Kit OCR on `demo_assembly_B_tampered.png`
+("1:NE555, 2:LM358, 4:NE555") → Review screen showing **real per-line ML Kit
+confidence scores** (79%, 83%, 89%, 78%, 87%, 85% — not synthetic 1.0
+defaults, proof this is genuine on-device recognition) → Compare & Show
+Results → **exactly the documented result**: "3 discrepancies: 3 should hold
+LM358 but nothing was found there; 4 holds NE555, which the specification
+does not call for; 2 holds LM358 where the specification calls for 7805" →
+Export Report (confirmed via `adb shell run-as ... cat` that the file was
+actually written to `app_flutter/parity_report_*.txt` with correct content)
+→ New Check (clean reset to Home, no state bleed). **Zero fatal exceptions**
+in logcat across the entire run.
+
+This is the first time in the project's history that ML Kit's actual
+behaviour on real hardware has been confirmed rather than assumed.
+
+### Bugs found and fixed this session
+
+1. **`lib/io/report.dart` silently lied about file-save success.** The old
+   code swallowed file-write exceptions and the UI always said "Report saved"
+   regardless — directly contradicting PRD section 23's error-state table.
+   Refactored into a pure `buildReportText()` (now unit-tested in
+   `test/report_test.dart`, 5 tests, no platform mocks needed) plus
+   `generateReport()` returning a `ReportResult{summary, fileSaved, filePath,
+   fileError}` that `results_screen.dart` reports honestly.
+2. **Unread items had no visual distinction in the review screen** beyond
+   text. PRD section 23 requires unread fields to be "highlighted." Added
+   amber background/icon/message ("OCR could not read this — tap to enter it
+   manually") in `review_extraction_screen.dart`.
+3. **`capture_screen.dart`'s error messaging was generic** ("No valid labels
+   found") regardless of what actually happened. Replaced with `_diagnose()`,
+   which distinguishes zero-blocks-at-all vs. blocks-found-but-no-position vs.
+   partial-success-with-unparsed-rows, each with a specific actionable next
+   step — directly answering the user's ask for "what the actual issue is and
+   what needs to be done" instead of "what."
+4. **A bug in my own new code**: `Retake` on a demo-sample screen reset to an
+   unusable idle state with no camera to fall back to. Fixed so Retake
+   reloads the same asset on demo screens; idle-state copy and button also
+   now read "Reload Demo Sample" instead of a misleading "Take Photo" when
+   there's no camera in that flow.
+
+### UI polish
+
+- Home screen: added the "Run Demo Sample" button + explanation, wrapped body
+  in `SafeArea`/`SingleChildScrollView` (previous layout could overflow on a
+  smaller screen), left-aligned card text.
+- Capture screen: shows live block/row/noise counts on the photo itself
+  ("N text block(s) read -> M row(s) parsed, K ignored as noise"), a
+  "DEMO SAMPLE" chip in the app bar when running the fallback path, and a
+  "Reading text on-device (ML Kit)..." label during processing instead of a
+  generic spinner.
+- Results screen: honest export messaging (see above).
+
+### Process note for next session
+
+Wasted significant time this session on a coordinate-mapping mistake while
+driving the UI via `adb shell input tap`: screenshot preview thumbnails are
+shown scaled down for viewing, but the underlying PNG is full device
+resolution (1080x2376 here) — tap coordinates must be computed against the
+**actual PNG pixel dimensions** (verify with a quick image-library dimension
+check), not estimated by eye from the shrunk preview. Cropping the exact
+button region at full resolution and measuring pixels directly is the
+reliable way to find tap targets; eyeballing the preview is not.
+
+Check run: `flutter analyze` — 0 issues. `flutter test` — **56/56 passing**
+(51 previous + 5 new in `report_test.dart`). All confirmed on-device as
+described above, not just in the test suite.
+
+Files touched: `lib/main.dart`, `lib/screens/capture_screen.dart`,
+`lib/screens/review_extraction_screen.dart`, `lib/io/report.dart`,
+`lib/screens/results_screen.dart`, `pubspec.yaml` (assets),
+`test/report_test.dart` (new).
+
+**Still outstanding:**
+- Release APK + `aapt dump permissions` verification (CAMERA-only claim,
+  Session 2's fix) — still never run to completion.
+- NFR1 (<15s timing), NFR2 (aeroplane mode), NFR3 (3 negative cases) — not
+  formally measured, though the demo-sample run above was well under 15s
+  observationally.
+- NFR6 clean-clone build on a machine other than Laptop 1.
+- Live camera capture of a REAL physical object (vs. a photographed screen)
+  — the demo-sample path proves the pipeline; a real breadboard photo is
+  still the one thing nobody has tried yet.

@@ -5,32 +5,72 @@ import '../models/spec_item.dart';
 import '../models/diff_result.dart';
 import '../logic/phrase.dart';
 
-/// Generates a report and writes to file + clipboard.
-Future<String> generateReport({
+/// F8: writes the verification report to the app documents directory and
+/// copies the one-sentence summary to the system clipboard (PRD section 22 —
+/// Office Kit bridges the rest by hand, this app makes no Office Kit call).
+
+/// Outcome of [generateReport], carrying enough detail for the UI to tell the
+/// operator the truth (PRD section 23: a file-write failure must not be
+/// reported as a save — the summary is still on the clipboard either way).
+class ReportResult {
+  /// The one-sentence summary that was copied to the clipboard.
+  final String summary;
+
+  /// True when the full report was written to disk.
+  final bool fileSaved;
+
+  /// Where the file was written, when [fileSaved] is true.
+  final String? filePath;
+
+  /// What went wrong, when [fileSaved] is false.
+  final String? fileError;
+
+  const ReportResult({
+    required this.summary,
+    required this.fileSaved,
+    this.filePath,
+    this.fileError,
+  });
+}
+
+/// Builds the full report text. Pure — no file or clipboard I/O — so this is
+/// unit-testable without platform mocks; [generateReport] wraps it with the
+/// actual side effects.
+String buildReportText({
   required List<SpecItem> expected,
   required List<SpecItem> observed,
   required DiffResult result,
-}) async {
-  final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+  required DateTime generatedAt,
+}) {
   final summary = phraseWithRules(result);
-
   final buffer = StringBuffer();
+
   buffer.writeln('PARITY VERIFICATION REPORT');
-  buffer.writeln('Generated: ${DateTime.now()}');
+  buffer.writeln('Generated: $generatedAt');
   buffer.writeln('');
   buffer.writeln('=== SUMMARY ===');
   buffer.writeln(summary);
   buffer.writeln('');
 
   buffer.writeln('=== EXPECTED (Specification) ===');
+  if (expected.isEmpty) {
+    buffer.writeln('(none captured)');
+  }
   for (final item in expected) {
-    buffer.writeln('${item.position}: ${item.component}');
+    buffer.writeln(
+      '${item.position}: ${item.component.isEmpty ? "(unread)" : item.component}',
+    );
   }
   buffer.writeln('');
 
   buffer.writeln('=== OBSERVED (Assembly) ===');
+  if (observed.isEmpty) {
+    buffer.writeln('(none captured)');
+  }
   for (final item in observed) {
-    buffer.writeln('${item.position}: ${item.component}');
+    buffer.writeln(
+      '${item.position}: ${item.component.isEmpty ? "(unread)" : item.component}',
+    );
   }
   buffer.writeln('');
 
@@ -46,19 +86,45 @@ Future<String> generateReport({
     }
   }
 
-  final reportText = buffer.toString();
+  return buffer.toString();
+}
 
-  // Write to file
+/// Writes the report to the app documents directory and the summary to the
+/// clipboard. The clipboard write always happens; the file write's actual
+/// success is reported truthfully in the result rather than assumed.
+Future<ReportResult> generateReport({
+  required List<SpecItem> expected,
+  required List<SpecItem> observed,
+  required DiffResult result,
+}) async {
+  final now = DateTime.now();
+  final summary = phraseWithRules(result);
+  final reportText = buildReportText(
+    expected: expected,
+    observed: observed,
+    result: result,
+    generatedAt: now,
+  );
+
+  String? savedPath;
+  String? fileError;
   try {
+    final timestamp = now.toIso8601String().replaceAll(':', '-');
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/parity_report_$timestamp.txt');
     await file.writeAsString(reportText);
+    savedPath = file.path;
   } catch (e) {
-    // File write failed - continue with clipboard only
+    fileError = e.toString();
   }
 
-  // Copy to clipboard
+  // Clipboard write happens regardless of the file outcome (PRD section 23).
   await Clipboard.setData(ClipboardData(text: summary));
 
-  return summary;
+  return ReportResult(
+    summary: summary,
+    fileSaved: savedPath != null,
+    filePath: savedPath,
+    fileError: fileError,
+  );
 }
