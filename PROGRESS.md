@@ -889,3 +889,104 @@ session) — that's the next concrete step, same "Run Demo Sample" walkthrough
 as before, just now pointed at the real board photo. Release APK permission
 verification, NFR1/NFR2/NFR3 formal measurement, and a truly physical (not
 laptop-screen) capture all remain open from earlier sessions.
+
+## Session 9 — merge teammate's UI redesign, remove fake CV stubs, read real unlabelled breaker panels
+
+Three distinct pieces of work this session. All pushed; `main` is at `28d058f`.
+
+### 1. Capture-failure severity (commit `0b485cb`)
+
+A random/unreadable photo (wrong subject, blank surface, out of focus) was
+shown the same low-emphasis amber footnote as a routine "a couple of lines
+didn't parse" note, and the primary button still said "Next" as if the
+capture had succeeded. Added a four-level `_CaptureIssue` classification
+(`notRecognized` / `noPositionMatch` / `partial` / `clean`) with visual
+weight matching severity: a prominent red "Image not recognised" card with a
+heading, a red status strip over the photo itself, and Retake promoted to
+the filled primary button while proceeding demotes to "Skip anyway". Also
+fixed the review screen's add/edit dialog hint, which still read "e.g. P1"
+after the parser learned to accept bare digits.
+
+### 2. Merged teammate's Material 3 redesign, removed fabricated CV code (commit `c224411`)
+
+Pulled `origin/main` (Talha-Khan-47's indigo/emerald Material 3 restyle plus
+a README rewrite). One conflict in `capture_screen.dart`, resolved by taking
+their file as the base and re-applying this session's severity system on top,
+restyled to their rounded-card/shadow language rather than plain Material
+colours. `review_extraction_screen.dart` merged cleanly with the hint fix
+intact.
+
+**Removed after reading every line:** `lib/logic/cv_pipeline/` (4 files) were
+100% fake stubs — `detect()` returns the literal string `'board_region_stub'`,
+`detectComponents()` returns hardcoded `ComponentRegion('P1', ...)`
+regardless of input. `lib/logic/assembly_pipeline.dart` and
+`spec_pipeline.dart` were real but unused duplicates of `parser.dart`'s job
+with an inconsistent position regex. Confirmed by grepping `main.dart` and
+every screen that **nothing imported any of them**, so removal changed no
+runtime behaviour. Left in place they were a genuine liability: fabricated-
+looking "computer vision" code in a repo a judge may read, plus a second,
+untested, inconsistent position-matching implementation. `test/pipeline_test.dart`
+went with them.
+
+**Fixed in README.md:** it advertised "Proximity-Based Label Matching... using
+`AssemblyPipeline`" as a headline feature and listed the deleted files in its
+directory tree. Both now describe what the app actually does (`parser.dart`'s
+row grouping). Test count corrected.
+
+### 3. Reading real breaker panels with no printed position labels (commit `28d058f`)
+
+User tested two real photos — a Havells 6-way board and a 9-breaker DIN rail
+panel — and hit: *"found 25 blocks but none started with... it reads havells
+havells."* Root cause is structural, not a noise-filtering gap: **neither
+board has any position number printed on it anywhere.** Manufacturers print
+ratings (`C32`, `C16`), breaking capacity (`6000`, `10000`), voltage
+(`230/400V~`), and model numbers — never "position 1, position 2". The
+existing parser only knew how to read a vertical list with an explicit
+position label in the left column; it had no strategy at all for a real
+unlabelled panel.
+
+Added `parseBreakerRow()` in `lib/logic/parser.dart`, used as a fallback only
+when the primary row-based parser finds zero items:
+
+- Clusters blocks into **columns by X-proximity** (one breaker's stacked text
+  — rating, voltage, capacity — shares an X position the way a row of labels
+  shares a Y position), mirroring the existing Y-based `groupIntoRows`.
+- Within each column, extracts the one block matching a real IEC 60898
+  breaker-rating pattern (curve letter `B/C/D/K/Z` + 1–3 digit current,
+  accepting both `"C32"` and `"C 32"` since OCR keeps the space sometimes).
+  Everything else in that column — brand name, model number, breaking
+  capacity, voltage, pole count — goes to `ignoredNoise`, never the component.
+- Numbers columns that produced a real rating left to right from 1, the way a
+  technician counting breakers would, since no printed number exists to read.
+  New `ParseResult.positionsAreOrdinal` flags this so the UI can say
+  "numbered left to right, no printed labels found" rather than presenting
+  inferred numbering as if it had been read.
+- Returns empty (not partial) when nothing looks like a rating at all —
+  inventing positions over unrelated text would be worse than admitting
+  nothing was found.
+
+**Correctness bug fixed in passing:** `_positionPattern` was unbounded
+(`^P?\d+$`), so a board's own `"6000"` / `"10000"` breaking-capacity print
+could be misread as "position 6000". Capped to 1–3 digits; nothing in scope
+has 1000 positions.
+
+Verified with `test/breaker_rating_fallback_test.dart` (9 new tests) replaying
+**both real board layouts** at their actual reported text and approximate real
+coordinates, including an end-to-end `compare()` check that a tampered rating
+is still correctly detected through the new fallback path.
+
+### Verification
+
+`flutter analyze` — 0 issues. `flutter test` — **71/71 passing** (62 previous
++ 9 new). Debug APK builds successfully.
+
+### Still outstanding
+
+- **Live camera test of the new breaker fallback.** The phone disconnected
+  before this could be run against the two real photos on-device. Everything
+  is unit-verified against their real text/layout, but the on-device
+  confirmation is the remaining gap — same "Start Verification" walkthrough,
+  pointed at either board photo on a laptop screen.
+- Release APK permission verification (`aapt dump permissions`), NFR1/NFR2/NFR3
+  formal measurement, and a truly physical (not laptop-screen) capture all
+  remain open from earlier sessions.
