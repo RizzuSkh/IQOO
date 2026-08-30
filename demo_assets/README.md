@@ -1,144 +1,135 @@
 # Demo images — how to use them
 
-**Do not download a random image off Google for this.** A web photo of a
-breadboard carries a watermark, an arbitrary font, JPEG compression noise, and
-someone else's lighting — every one of those hurts OCR consistency, and you'd
-be rehearsing against an input you can't reproduce twice. These are generated
+**Do not download a random image off Google for this.** A web photo carries a
+watermark, an arbitrary font, JPEG compression noise, and someone else's
+lighting — every one of those hurts OCR consistency, and you'd be rehearsing
+against an input you can't reproduce twice. Everything here is generated
 locally with a known, exact correct answer, so you can rehearse the same
 result over and over and trust it on stage.
 
-## Position format — read this first
+**Every scenario below is meant to be photographed with the phone's real
+camera**, pointed at a laptop screen. There is a separate "Run Demo Sample"
+button in the app that loads these images directly with no camera involved —
+that exists only as a stage-safety fallback and a way to test the pipeline
+without a phone in hand. **The actual demo is the camera.** That's the whole
+point of the project: it reads a physical scene, not a file.
 
-The parser accepts **both** `P1` style and a **bare digit** like `1`. Your
-actual verified spec document, `Breadboard_Bill_of_Materials.pdf`, uses bare
-digits in its POSITION column (`1`, `2`, `3`, `4`) — not `P1`. The parser used
-to reject every bare-digit label, which is why OCR failed even on printed,
-perfectly legible text: it wasn't a photo-quality problem, the position format
-just didn't match what the code expected. Fixed in `lib/logic/parser.dart`
-and pinned down in `test/parser_test.dart`'s "bare-digit positions" group and
-`test/demo_realistic_scenario_test.dart`.
-
-## What's here
+## Primary scenario: MCB distribution board (recommended)
 
 | File | Use as | Content |
 |---|---|---|
-| `demo_spec_A.png` | Specification | **Matches the real BOM exactly**: 1 NE555, 2 7805, 3 LM358 |
-| `demo_assembly_A_match.png` | Assembly (clean run) | identical to spec — proves the MATCH state |
-| `demo_assembly_B_tampered.png` | Assembly (tamper run) | 2 mismatched, 3 removed, 4 (the BOM's real spare slot) populated without authorisation |
-| `demo_spec_realistic.png` | Specification | 1 NE555, 2 LM358, 3 LM393 — **illustrative only, see note below** |
-| `demo_assembly_realistic_match.png` | Assembly (clean run) | a real-looking AI-generated breadboard photo + a label panel underneath |
-| `demo_assembly_realistic_tampered.png` | Assembly (tamper run) | same photo, 2 mismatched, 3 row omitted |
+| `demo_spec_mcb.png` | Specification | Blueprint: 5 positions, ratings 32A/20A/16A/6A/32A |
+| `demo_assembly_mcb_match.png` | Assembly (clean run) | Illustrated panel + matching labels — proves MATCH |
+| `demo_assembly_mcb_tampered.png` | Assembly (tamper run) | Position 2 mismatched, 4 missing, 6 an unauthorised extra breaker |
 
-Regenerate the A/B set (the BOM-accurate one) with:
+Regenerate with:
 ```powershell
-powershell -File demo_assets\generate_demo_screens.ps1
-```
-Regenerate the realistic set (needs the source photo at the path hardcoded in
-the script) with:
-```powershell
-powershell -File demo_assets\overlay_labels_on_breadboard.ps1
+powershell -File demo_assets\generate_mcb_demo.ps1
 ```
 
-### Important: the "realistic" photo set is NOT the official BOM
+### Why an illustration instead of a photo of a real MCB panel
 
-The AI-generated breadboard photo shows three chips etched `NE555P`,
-`LM358P`, `LM393N`. Your real BOM's position 2 calls for a **7805 voltage
-regulator** — a 3-pin TO-220 part that looks nothing like these 8-pin DIP
-chips. Labelling that photo "7805" would show text contradicting the picture
-under it to anyone who looks closely, including a judge who knows
-electronics. So the realistic set uses the chips' own real part numbers
-instead, as a "looks like real hardware" rehearsal aid — use **`demo_spec_A`
-+ `demo_assembly_A_match`/`_B_tampered`** whenever you need the demo to match
-`Breadboard_Bill_of_Materials.pdf` precisely, which is most of the time.
+The Havells panel photo shared in chat has the same problem the original
+breadboard photo had: current ratings are printed in tiny text directly on
+each switch, with no separate position label anywhere on the board. Reusing
+someone else's product photo also risks the exact mismatch caught last
+time — labelling a picture with text that doesn't match what's actually
+printed on it, which a technically literate judge would notice immediately.
 
-### Why the realistic set has a label panel glued below the photo
+So this panel is drawn from scratch: a distribution-board illustration with
+five breaker switches, followed by a clean label panel with position and
+rating baked in from the start. It's not trying to pass as a photograph — it
+reads as a technical diagram, which is arguably a better fit for a
+"blueprint" anyway, and the labels are correct and legible by construction.
 
-The original AI photo had **zero position labels anywhere** — only each
-chip's tiny etched part code (`NE555P` / `93M` / `DN1810`, three lines per
-chip). That reproduced the exact "no valid labels found" error, and no amount
-of cropping could fix it, because there was nothing in the frame matching a
-position pattern. Confirmed with `test/demo_realistic_scenario_test.dart`,
-which replays the original photo's actual OCR text through `parseBlocks()`
-and asserts it parses to nothing.
+If you'd rather use a real device photo of a real object for extra
+authenticity, that's exactly what section 19 of the PRD already recommends:
+print small physical position labels (bold, black on white, ≥1cm tall) and
+tape one next to each breaker on an actual panel, then photograph that
+directly — no laptop screen needed at that point.
 
-The fix is a clean white label panel appended **below** the photo (not
-overlaid on top of it) with positions stacked vertically, generous gaps
-between rows, and a wide column gap — the same layout already proven to work
-in `demo_spec_A.png`. (A first attempt placed labels in one horizontal strip
-across the photo; that risked ML Kit merging all three into one unparseable
-block, since same-row + touching boxes look like one label to OCR. Fixed by
-stacking rows instead.) Also verified in the same test file.
+## Alternate scenario: electronics breadboard (still available)
 
-## How to run the demo
+| File | Use as | Content |
+|---|---|---|
+| `demo_spec_A.png` | Specification | Matches `Breadboard_Bill_of_Materials.pdf` exactly: 1 NE555, 2 7805, 3 LM358 |
+| `demo_assembly_A_match.png` | Assembly (clean run) | identical to spec — MATCH |
+| `demo_assembly_B_tampered.png` | Assembly (tamper run) | 2 mismatched, 3 missing, 4 unexpected |
+| `demo_spec_realistic.png` / `demo_assembly_realistic_*.png` | — | An AI-generated breadboard photo + label panel — illustrative only, does not match the official BOM's actual parts (see comments in `overlay_labels_on_breadboard.ps1`) |
 
-1. Open `demo_spec_A.png` on the laptop, **full-screen** (an image viewer's
-   fullscreen mode, or a browser tab with F11 — anything that removes toolbars
-   and other text from view). Max screen brightness.
-2. On the phone, open Parity, tap **Start Verification**, then **Take Photo**
-   on the Capture Specification screen. Photograph the laptop screen straight
-   on (not at an angle — angled shots distort the text and OCR reads it
-   worse), filling as much of the phone's frame with the label sheet as you
-   can, from about 20–30cm away.
-3. Use the crop sliders to trim right up to the thin grey border in the
-   image, cutting out everything outside it — this also cuts out any screen
-   bezel, reflection, or desk visible around the edges. Tap **Scan Selected
-   Area**.
-4. Confirm the status line reads "3 text blocks read, 3 row(s) parsed" (or
-   close — if a row lands in "unparsed", the review screen will show you
-   which one, and you can add it manually in two taps).
-5. Tap **Next**, then swap the laptop display to `demo_assembly_A_match.png`
-   (or `demo_assembly_B_tampered.png` for the discrepancy story) and repeat
+Regenerate with `generate_demo_screens.ps1` / `overlay_labels_on_breadboard.ps1`.
+
+`lib/main.dart`'s `_demoSpecAsset` / `_demoAssemblyTamperedAsset` constants
+control which scenario the in-app "Run Demo Sample" button uses — currently
+the MCB set. Swap them to point at the breadboard files if you want that
+story instead.
+
+## Position format — worth knowing
+
+The parser accepts **both** `P1` style and a bare digit like `1`. Your real
+`Breadboard_Bill_of_Materials.pdf` uses bare digits, and the MCB blueprint
+above follows the same convention. The parser used to reject bare digits,
+which is why OCR failed even on perfectly legible printed text early on — see
+`PROGRESS.md` Session 5 for the full story. Fixed and covered by
+`test/parser_test.dart`'s "bare-digit positions" group.
+
+## How to run the demo — real camera, step by step
+
+1. Open `demo_spec_mcb.png` on the laptop, **full-screen** (an image viewer's
+   fullscreen mode, or a browser tab with F11 — anything that removes
+   toolbars and other on-screen text). Max screen brightness, and angle the
+   screen slightly away from overhead lights to kill glare.
+2. On the phone, open Parity and tap **Start Verification** (not "Run Demo
+   Sample" — that one skips the camera). Tap **Take Photo** on the Capture
+   Specification screen. Hold the phone steady, perpendicular to the laptop
+   screen, about 20–30cm away, filling as much of the frame with the sheet as
+   you comfortably can.
+3. You'll land on the crop screen with a live preview. Use the **Sides** and
+   **Top/Bottom** sliders to trim right up to the thin grey border in the
+   image — this is what "ignore the unwanted text" means in practice: you're
+   telling the app exactly where to look, the same way you'd point a
+   colleague's attention at one line on a page. Tap **Scan Selected Area**.
+4. Read the status line under the photo: it tells you exactly what happened —
+   "N text block(s) read -> M row(s) parsed", plus a note if anything was
+   ignored as stray text or didn't match a position. If something's off,
+   **Retake** and crop tighter; if it's close enough, you can also fix
+   individual rows by hand on the next screen.
+5. Tap **Next**. Swap the laptop display to `demo_assembly_mcb_match.png` (or
+   `_tampered.png` for the discrepancy story) and repeat step 2 onward for
    Capture Assembly.
-6. On the Review screen, check both lists look right, then **Compare & Show
-   Results**.
-
-Same steps work for the realistic set — swap in `demo_spec_realistic.png` /
-`demo_assembly_realistic_match.png` / `demo_assembly_realistic_tampered.png`.
-Only difference: the assembly photo is taller (photo + label panel), so when
-photographing it, back up enough that the whole label panel is in frame, or
-scroll the image viewer so the panel fills the shot on its own — the panel is
-what OCR needs to read, the photo above it is just for looking real.
+6. On the Review screen, glance at both lists — this is also where you'd
+   catch and fix anything OCR got wrong before comparing. Tap **Compare &
+   Show Results**.
 
 Expected results, so you know a run went correctly before you're on stage:
 
-- **Scenario A** (`demo_spec_A` + `demo_assembly_A_match`): **MATCH**, zero
-  discrepancies.
-- **Scenario B** (`demo_spec_A` + `demo_assembly_B_tampered`): **3
-  discrepancies** — 2 mismatched (7805 → LM358), 3 missing (LM358), 4
-  unexpected (NE555) — a real part turning up in the BOM's real spare slot.
-- **Realistic match** (`demo_spec_realistic` + `demo_assembly_realistic_match`):
-  **MATCH**, zero discrepancies.
-- **Realistic tampered** (`demo_spec_realistic` + `demo_assembly_realistic_tampered`):
-  **2 discrepancies** — 2 mismatched (LM358 → NE555), 3 missing (LM393).
+- **MCB match** (`demo_spec_mcb` + `demo_assembly_mcb_match`): **MATCH**,
+  zero discrepancies.
+- **MCB tampered** (`demo_spec_mcb` + `demo_assembly_mcb_tampered`): **3
+  discrepancies** — position 2 mismatched (20A → 16A), position 4 missing
+  (6A), position 6 unexpected (20A) — an unauthorised breaker in a spare
+  slot, mirroring exactly how a judge could plausibly "tamper" a real panel.
+- **Breadboard match** (`demo_spec_A` + `demo_assembly_A_match`): **MATCH**.
+- **Breadboard tampered** (`demo_spec_A` + `demo_assembly_B_tampered`): **3
+  discrepancies** — 2 mismatched, 3 missing, 4 unexpected.
 
-## Why a laptop screen instead of a printout
+## "Can't the app just detect the important text with AI and ignore the rest?"
 
-A monitor is bright, flat, and perfectly reproducible between rehearsals — no
-ink running low, no paper glare, no crumpled sheet. The one risk is screen
-glare from overhead lighting: angle the laptop screen slightly down/away from
-the brightest light in the room, and keep the phone perpendicular to the
-screen rather than off to one side.
+Short answer: that's what the crop step already is. Training a model to
+automatically find "the label region" in an arbitrary photo is a real
+computer-vision task — object detection, needing a labelled dataset and
+training infrastructure neither exists nor fits in a hackathon window, and it
+would still need a human to correct it when it gets the region wrong. A human
+drawing a box around the right area, once, in under two seconds, is the
+practical version of that same idea, and it's what's already built. The
+`ignoredNoise` handling in `lib/logic/parser.dart` is the second line of
+defence: anything ML Kit picks up alongside a real row (a stray number, a
+column label) gets reported and discarded rather than corrupting the
+component text, whether or not the crop was perfect.
 
-If you'd rather have a physical fallback in case the laptop isn't available
-at the pitch table, print the same PNGs at full size (they're already
-1920×1080 — print landscape, fit to page) instead of hand-writing labels;
-that reproduces the same font size and layout on paper. This also means you
-could print `Breadboard_Bill_of_Materials.pdf` itself and photograph that
-directly as the specification — it's already the right shape (position,
-component, description columns) and the parser now reads its bare-digit
-positions correctly.
+## The offline guarantee
 
-## The real assembly demo
-
-These label sheets are a *rehearsal and fallback* tool — they prove the OCR →
-parser → compare → phrase pipeline is solid under controlled input, which is
-what "it gives random/wrong values sometimes" was actually about (see
-`PROGRESS.md`: it was code bugs — a noise-appending bug, then a position
-format mismatch with your own BOM — never the OCR model).
-
-For the live judge-tampers-the-board moment from PRD section 10, print small
-physical label cards in this same style (bold, black on white, ≥1cm tall,
-bare-digit position) and tape one at each breadboard position instead of
-relying on the chip's own tiny factory print — that is what PRD section 19
-specifies, and it's the difference between reliable and unreliable OCR on a
-real object.
+Nothing about the demo depends on connectivity — OCR, comparison, and report
+generation all run on-device (see CLAUDE.md and PRD section 21). You can
+switch the phone to aeroplane mode before either capture and the pipeline
+behaves identically; there's no network call anywhere in the app to fail.

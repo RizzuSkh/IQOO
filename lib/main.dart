@@ -23,12 +23,14 @@ class ParityApp extends StatelessWidget {
 }
 
 /// Bundled sample images for "Run Demo Sample" — see pubspec.yaml assets and
-/// CaptureScreen.assetOverride. Matches Breadboard_Bill_of_Materials.pdf
-/// (BB-01, Assembly A) exactly: position 1 NE555, 2 mismatched to LM358, 3
-/// missing, 4 an unauthorised part in the BOM's real spare slot.
-const String _demoSpecAsset = 'demo_assets/demo_spec_A.png';
+/// CaptureScreen.assetOverride. This is the MCB distribution-board scenario
+/// (demo_assets/generate_mcb_demo.ps1): position 2 mismatched (20A -> 16A),
+/// position 4 missing, position 6 an unauthorised breaker in a spare slot.
+/// The electronics-breadboard scenario (demo_spec_A / demo_assembly_B) is
+/// still bundled and works the same way — swap these two constants to switch.
+const String _demoSpecAsset = 'demo_assets/demo_spec_mcb.png';
 const String _demoAssemblyTamperedAsset =
-    'demo_assets/demo_assembly_B_tampered.png';
+    'demo_assets/demo_assembly_mcb_tampered.png';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});

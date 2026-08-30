@@ -42,6 +42,36 @@ class ResultsScreen extends StatelessWidget {
     }
   }
 
+  /// A one-glance key for the colour coding below, so a judge doesn't have to
+  /// read every card's "Type:" line to know what red vs. amber vs. orange
+  /// means (PRD FR9: missing red, unexpected amber, mismatched orange).
+  Widget _legend() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: Colors.grey.shade100,
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 4,
+        children: [for (final type in DiffType.values) _legendChip(type)],
+      ),
+    );
+  }
+
+  Widget _legendChip(DiffType type) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(_getIcon(type), size: 15, color: _getColor(type)),
+        const SizedBox(width: 3),
+        Text(
+          type.name[0].toUpperCase() + type.name.substring(1),
+          style: TextStyle(fontSize: 12, color: _getColor(type)),
+        ),
+      ],
+    );
+  }
+
   Future<void> _exportReport(BuildContext context) async {
     final report = await generateReport(
       expected: expected,
@@ -114,6 +144,8 @@ class ResultsScreen extends StatelessWidget {
               ],
             ),
           ),
+
+          if (!result.isMatch) _legend(),
 
           // Discrepancy list
           Expanded(
