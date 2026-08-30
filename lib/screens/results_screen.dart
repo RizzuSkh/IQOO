@@ -146,7 +146,8 @@ class ResultsScreen extends StatelessWidget {
     // Tell the truth about the file write (PRD section 23) instead of
     // always claiming "saved" — the clipboard write happens either way.
     final message = report.fileSaved
-        ? 'Report saved to app storage and summary copied to clipboard.'
+        ? 'Saved report (.txt) and structured record (.json) to app storage; '
+              'summary copied to clipboard.'
         : "Couldn't save the report file (${report.fileError ?? 'unknown error'}), "
               'but the summary is on the clipboard.';
 

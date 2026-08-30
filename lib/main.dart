@@ -70,9 +70,15 @@ class ParityApp extends StatelessWidget {
   }
 }
 
-const String _demoSpecAsset = 'demo_assets/demo_spec_mcb_real.png';
+/// The in-app demo now runs the DENSE 20-circuit hospital schedule, not a
+/// sparse 6-row sheet. That is deliberate: a sparse sheet is the easy case
+/// and hid a real bug (ocr.dart consumed ML Kit's block-level text, so a
+/// dense table collapsed into a couple of run-on strings and nothing
+/// parsed). Demoing the hard case is the only way the fix stays honest.
+/// Other bundled scenarios remain available — swap these two constants.
+const String _demoSpecAsset = 'demo_assets/dense_spec_hospital.png';
 const String _demoAssemblyTamperedAsset =
-    'demo_assets/demo_assembly_mcb_real_tampered.png';
+    'demo_assets/dense_assembly_hospital_tampered.png';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

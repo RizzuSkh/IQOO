@@ -24,7 +24,8 @@ final RegExp _combinedPositionPattern = RegExp(
 /// A breaker/MCB rating code: an IEC 60898 curve letter (B, C, D — the
 /// common residential/commercial trip curves — plus K and Z for specialised
 /// breakers) followed by the current rating.
-final RegExp _ratingPattern = RegExp(r'^[BCDKZ]\s?\d{1,3}A?$', caseSensitive: false);
+final RegExp _ratingPattern =
+    RegExp(r'^[BCDKZ]\s?\d{1,3}A?$', caseSensitive: false);
 
 /// Trailing punctuation OCR commonly appends to a label, e.g. "P1:" or "P1.".
 final RegExp _trailingPunctuation = RegExp(r'[:.,;\-–—]+$');
@@ -33,16 +34,34 @@ final RegExp _trailingPunctuation = RegExp(r'[:.,;\-–—]+$');
 final RegExp _whitespaceRun = RegExp(r'\s+');
 
 /// Specific rating and component patterns to extract only required values (e.g. 16A, C16, NE555).
-final RegExp _amperePattern = RegExp(r'\b\d+\s*A(?:MP)?\b', caseSensitive: false);
-final RegExp _breakerCurvePattern = RegExp(r'\b[B-D]\d+\b', caseSensitive: false);
-final RegExp _polesPattern = RegExp(r'\b(DP|SP|TP|TPN|4P|2P|1P)\b', caseSensitive: false);
-final RegExp _icPartPattern = RegExp(r'\b[A-Z]{1,4}\d{2,5}[A-Z]*\b', caseSensitive: false);
+final RegExp _amperePattern =
+    RegExp(r'\b\d+\s*A(?:MP)?\b', caseSensitive: false);
+final RegExp _breakerCurvePattern =
+    RegExp(r'\b[B-D]\d+\b', caseSensitive: false);
+final RegExp _polesPattern =
+    RegExp(r'\b(DP|SP|TP|TPN|4P|2P|1P)\b', caseSensitive: false);
+final RegExp _icPartPattern =
+    RegExp(r'\b[A-Z]{1,4}\d{2,5}[A-Z]*\b', caseSensitive: false);
 
 /// Common electrical & standards noise words to strip out when cleaning component text.
 final RegExp _noiseWords = RegExp(
   r'\b(\d+V|\d+HZ|50/60HZ|\d+KA|\d+A(?=00)|AC|DC|IEC\d*|EN\d*|CE|MADE IN \w+|SCHNEIDER|HAVELLS|ABB|SIEMENS|LEGRAND)\b',
   caseSensitive: false,
 );
+
+/// A whole table row arriving as one text run: a leading position label,
+/// then a separator, then everything else. OCR at line granularity returns
+/// exactly this shape — "1 C63 MAIN INCOMER" is one recognised line, not
+/// three — so the parser has to be able to split a single run rather than
+/// only pairing separate blocks. Without this, dense documents still fail
+/// even after the OCR layer switched to emitting lines.
+final RegExp _mergedRowPattern = RegExp(r'^(P?\d{1,3})[\s:.\)\-]+(.+)$');
+
+/// A rating code appearing at the START of the remainder of a merged row,
+/// so "1 C 32 MAIN INCOMER" keeps "C 32" together instead of splitting the
+/// rating's own internal space into component "C" and noise "32".
+final RegExp _leadingRatingPattern =
+    RegExp(r'^([BCDKZ]\s?\d{1,3}A?)(?:\s|$)');
 
 /// The outcome of parsing one photograph's blocks.
 ///
@@ -130,9 +149,8 @@ class _ExtractedItem {
 /// Supports separate position/component blocks, single merged blocks (e.g. "P1 16A"),
 /// circuit breaker models, and circuit diagrams.
 ParseResult parseBlocks(List<OcrBlock> blocks) {
-  final usable = blocks
-      .where((block) => _flatten(block.text).isNotEmpty)
-      .toList();
+  final usable =
+      blocks.where((block) => _flatten(block.text).isNotEmpty).toList();
   if (usable.isEmpty) {
     return const ParseResult(items: [], unparsedRows: []);
   }
@@ -146,6 +164,27 @@ ParseResult parseBlocks(List<OcrBlock> blocks) {
 
     if (row.length == 1) {
       final blockText = _flatten(row.first.text);
+
+      // Try splitMergedRow first — it correctly separates position,
+      // component, and description noise from a single dense line like
+      // "1 C63 MAIN INCOMER" or "1 PROJECTOR-EPSON EB-S41 LAB A".
+      final split = splitMergedRow(blockText);
+      if (split != null) {
+        items.add(
+          SpecItem(
+            position: split.position,
+            component: split.component,
+            confidence: row.first.confidence,
+          ),
+        );
+        ignoredNoise.addAll(split.noise);
+        continue;
+      }
+
+      // Fall back to combined-pattern extraction for cases like
+      // "P1 16A" or "CB1: 16A 240V AC" where _extractPositionAndComponent
+      // handles prefixed position codes and _cleanComponentValue strips
+      // electrical noise.
       final extracted = _extractPositionAndComponent(blockText);
       if (extracted != null) {
         items.add(
@@ -173,12 +212,14 @@ ParseResult parseBlocks(List<OcrBlock> blocks) {
         // First block had only position, second block has component
         component = _cleanComponentValue(_flatten(row[1].text));
         if (row.length > 2) {
-          ignoredNoise.addAll(row.skip(2).map((block) => _flatten(block.text)));
+          ignoredNoise
+              .addAll(row.skip(2).map((block) => _flatten(block.text)));
         }
       } else {
         // First block contained both position & component (e.g. "P1 16A")
         // Remaining blocks in row are noise
-        ignoredNoise.addAll(row.skip(1).map((block) => _flatten(block.text)));
+        ignoredNoise
+            .addAll(row.skip(1).map((block) => _flatten(block.text)));
       }
 
       items.add(
@@ -188,9 +229,28 @@ ParseResult parseBlocks(List<OcrBlock> blocks) {
           confidence: _meanConfidence(row.take(2)),
         ),
       );
-    } else {
-      unparsedRows.add(row.map((block) => _flatten(block.text)).join(' '));
+      continue;
     }
+
+    // The leftmost run isn't a bare position, but the row may still BE a row
+    // — just delivered as one merged text run ("1 C63 MAIN INCOMER"), which
+    // is the normal shape at line granularity. Split it rather than
+    // discarding a perfectly good row.
+    final joined = row.map((block) => _flatten(block.text)).join(' ');
+    final split = splitMergedRow(joined);
+    if (split != null) {
+      items.add(
+        SpecItem(
+          position: split.position,
+          component: split.component,
+          confidence: _meanConfidence(row),
+        ),
+      );
+      ignoredNoise.addAll(split.noise);
+      continue;
+    }
+
+    unparsedRows.add(joined);
   }
 
   if (items.isNotEmpty) {
@@ -231,9 +291,8 @@ ParseResult parseBlocks(List<OcrBlock> blocks) {
 /// and inventing positions over unrelated text would be worse than admitting
 /// nothing was found.
 ParseResult parseBreakerRow(List<OcrBlock> blocks) {
-  final usable = blocks
-      .where((block) => _flatten(block.text).isNotEmpty)
-      .toList();
+  final usable =
+      blocks.where((block) => _flatten(block.text).isNotEmpty).toList();
   if (usable.isEmpty) {
     return const ParseResult(items: [], unparsedRows: []);
   }
@@ -380,7 +439,8 @@ _ExtractedItem? _extractPositionAndComponent(String text) {
     final fullPosStr = match.group(0)!;
     final posLabel = _asPosition(fullPosStr);
     if (posLabel != null) {
-      final hasRealPrefix = match.group(1) != null && match.group(1)!.isNotEmpty;
+      final hasRealPrefix =
+          match.group(1) != null && match.group(1)!.isNotEmpty;
       final remainder = flat.substring(match.end).trim();
 
       // For bare-digit positions in combined blocks, only accept the match
@@ -445,6 +505,70 @@ bool _hasRecognisableComponent(String text) {
       _breakerCurvePattern.hasMatch(text) ||
       _icPartPattern.hasMatch(text) ||
       _polesPattern.hasMatch(text);
+}
+
+/// One table row recovered from a single merged text run.
+class MergedRow {
+  /// The leading position label, normalised (uppercase, trimmed).
+  final String position;
+
+  /// The component immediately following the position.
+  final String component;
+
+  /// Everything after the component — a description column, a part number,
+  /// whatever else shared the line. Reported, never folded into [component].
+  final List<String> noise;
+
+  /// Creates a split row.
+  const MergedRow({
+    required this.position,
+    required this.component,
+    this.noise = const [],
+  });
+}
+
+/// Splits a single text run like "1 C63 MAIN INCOMER" into its position,
+/// component, and leftover description text. Returns null when [text] does
+/// not begin with something that could be a position label.
+///
+/// This exists because OCR at line granularity delivers a whole table row as
+/// one recognised line. The row-pairing path in [parseBlocks] handles the
+/// case where position and component arrive as separate blocks; this handles
+/// the far more common dense-document case where they do not.
+///
+/// A rating code at the head of the remainder is kept whole, so
+/// "1 C 32 LIGHTING" yields component "C32" rather than component "C" with
+/// "32" lost to noise.
+MergedRow? splitMergedRow(String text) {
+  final match = _mergedRowPattern.firstMatch(_flatten(text));
+  if (match == null) return null;
+
+  final position = match.group(1)!.toUpperCase();
+  final rest = match.group(2)!.trim();
+  if (rest.isEmpty) {
+    return MergedRow(position: position, component: '');
+  }
+
+  final rating = _leadingRatingPattern.firstMatch(rest.toUpperCase());
+  if (rating != null) {
+    final component = rating.group(1)!.replaceAll(' ', '');
+    final remainder = rest.substring(rating.group(1)!.length).trim();
+    return MergedRow(
+      position: position,
+      component: component,
+      noise: remainder.isEmpty ? const [] : [remainder],
+    );
+  }
+
+  final firstSpace = rest.indexOf(' ');
+  if (firstSpace < 0) {
+    return MergedRow(position: position, component: rest);
+  }
+  return MergedRow(
+    position: position,
+    component: rest.substring(0, firstSpace),
+    noise: [rest.substring(firstSpace + 1).trim()],
+  );
 }
 
 /// Returns [text] as a normalised position label, or null if it is not one.

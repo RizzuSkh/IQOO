@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:parity/io/report.dart';
 import 'package:parity/logic/compare.dart';
+import 'package:parity/models/diff_result.dart';
 import 'package:parity/models/spec_item.dart';
 
 /// Tests only buildReportText() — the pure formatting function report.dart
@@ -83,6 +86,99 @@ void main() {
         generatedAt: generatedAt,
       );
       expect(text, contains('Generated: $generatedAt'));
+    });
+  });
+
+  _jsonTests();
+}
+
+void _jsonTests() {
+  group('buildReportJson()', () {
+    final generatedAt = DateTime.utc(2026, 8, 30, 11, 30);
+
+    test('emits a parseable document with the declared schema', () {
+      final json = buildReportJson(
+        expected: const [SpecItem(position: '1', component: 'C63')],
+        observed: const [SpecItem(position: '1', component: 'C63')],
+        result: const DiffResult.empty(),
+        generatedAt: generatedAt,
+      );
+
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      expect(decoded['schema'], 'parity.verification.v1');
+      expect(decoded['isMatch'], isTrue);
+      expect(decoded['generatedAt'], generatedAt.toIso8601String());
+    });
+
+    test('records every discrepancy with its type, expected and found', () {
+      final expected = const [
+        SpecItem(position: '1', component: 'C63'),
+        SpecItem(position: '2', component: 'C32'),
+        SpecItem(position: '3', component: 'C16'),
+      ];
+      final observed = const [
+        SpecItem(position: '1', component: 'C63'),
+        SpecItem(position: '2', component: 'C16'),
+        SpecItem(position: '9', component: 'C20'),
+      ];
+
+      final json = buildReportJson(
+        expected: expected,
+        observed: observed,
+        result: compare(expected, observed),
+        generatedAt: generatedAt,
+      );
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      final discrepancies = (decoded['discrepancies'] as List)
+          .cast<Map<String, dynamic>>();
+
+      expect(decoded['isMatch'], isFalse);
+      expect(decoded['counts']['missing'], 1);
+      expect(decoded['counts']['mismatched'], 1);
+      expect(decoded['counts']['unexpected'], 1);
+
+      final mismatch = discrepancies.firstWhere(
+        (d) => d['type'] == 'mismatched',
+      );
+      expect(mismatch['position'], '2');
+      expect(mismatch['expected'], 'C32');
+      expect(mismatch['found'], 'C16');
+    });
+
+    test('flags an unread component explicitly rather than as empty text', () {
+      final json = buildReportJson(
+        expected: const [SpecItem(position: '1', component: 'C63')],
+        observed: const [SpecItem(position: '1', component: '')],
+        result: compare(
+          const [SpecItem(position: '1', component: 'C63')],
+          const [SpecItem(position: '1', component: '')],
+        ),
+        generatedAt: generatedAt,
+      );
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+      final observed =
+          (decoded['observed'] as List).first as Map<String, dynamic>;
+
+      expect(observed['unread'], isTrue);
+      expect(decoded['counts']['unread'], 1);
+    });
+
+    test('round-trips a dense 20-row schedule without loss', () {
+      final expected = [
+        for (var i = 1; i <= 20; i++)
+          SpecItem(position: '$i', component: 'C${i % 2 == 0 ? 32 : 16}'),
+      ];
+      final json = buildReportJson(
+        expected: expected,
+        observed: expected,
+        result: compare(expected, expected),
+        generatedAt: generatedAt,
+      );
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
+
+      expect(decoded['counts']['expected'], 20);
+      expect((decoded['expected'] as List), hasLength(20));
+      expect(decoded['isMatch'], isTrue);
     });
   });
 }

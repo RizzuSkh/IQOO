@@ -131,25 +131,45 @@ class OcrReader {
       throw OcrException('Text recognition failed', error);
     }
 
-    return recognised.blocks
-        .map(
-          (block) => OcrBlock(
+    // Emit one OcrBlock per recognised LINE, not per block.
+    //
+    // This is the single most important decision in this file. ML Kit
+    // returns a three-level tree — blocks contain lines, lines contain
+    // elements — and a "block" is a whole visually-grouped region, not a
+    // row. On a dense document (a 20-row distribution-board schedule, a
+    // school equipment list) ML Kit routinely returns the entire table as
+    // two or three blocks whose `.text` is every row joined by newlines.
+    // Consuming block text meant the parser saw 3 run-on strings instead of
+    // 20 rows, none of which started with a clean position label — which is
+    // exactly the "didn't find... didn't find..." failure on large sheets,
+    // while small sparse sheets happened to work because each row became
+    // its own block.
+    //
+    // Lines carry their own bounding boxes, so the parser's existing spatial
+    // row-grouping still works — it just now operates on real rows.
+    final lines = <OcrBlock>[];
+    for (final block in recognised.blocks) {
+      for (final line in block.lines) {
+        lines.add(
+          OcrBlock(
+            text: line.text,
+            boundingBox: line.boundingBox,
+            confidence: line.confidence ?? 1.0,
+          ),
+        );
+      }
+      // A block with no lines at all still carries text worth keeping.
+      if (block.lines.isEmpty && block.text.trim().isNotEmpty) {
+        lines.add(
+          OcrBlock(
             text: block.text,
             boundingBox: block.boundingBox,
-            confidence: _meanLineConfidence(block),
+            confidence: 1.0,
           ),
-        )
-        .toList();
-  }
-
-  /// Mean of the confidences ML Kit reported for [block]'s lines, or 1.0 if none.
-  double _meanLineConfidence(TextBlock block) {
-    final reported = block.lines
-        .map((line) => line.confidence)
-        .whereType<double>()
-        .toList();
-    if (reported.isEmpty) return 1.0;
-    return reported.reduce((a, b) => a + b) / reported.length;
+        );
+      }
+    }
+    return lines;
   }
 
   /// Releases the native recogniser. Safe to call more than once.

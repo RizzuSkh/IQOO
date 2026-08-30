@@ -990,3 +990,106 @@ is still correctly detected through the new fallback path.
 - Release APK permission verification (`aapt dump permissions`), NFR1/NFR2/NFR3
   formal measurement, and a truly physical (not laptop-screen) capture all
   remain open from earlier sessions.
+
+## Session 10 — root-caused the "fails on large datasets" evaluation failure
+
+A mentor evaluated the project live. Verdict: idea is good, but OCR failed on
+a larger hospital/school specification — "didn't find... didn't find" — and
+the team had to fall back to manual entry. The mentor asked what dataset the
+model was trained on, and suggested using Google's models, more complex
+architectures, an offline model like Gemma, and converting the data to JSON
+before comparing.
+
+### What the failure actually was (not a model problem)
+
+**ML Kit returns a three-level tree: blocks contain lines, lines contain
+elements.** `lib/logic/ocr.dart` was emitting one `OcrBlock` per ML Kit
+*block*. A "block" is a visually-grouped region, not a row. On a dense table
+ML Kit routinely returns the whole schedule as two or three blocks whose
+`.text` is every row joined by newlines — and `parser.dart`'s `_flatten`
+then collapsed those newlines into spaces.
+
+So a 20-row hospital schedule reached the parser as ~3 run-on strings. Row
+grouping saw 3 rows. None began with a clean position label. Result:
+"didn't find". Small sparse sheets worked only because each row happened to
+become its own block. **The character recognition was never wrong; the app
+was discarding the structure ML Kit had already provided.**
+
+### The fix (two halves, both required)
+
+1. **`ocr.dart` now emits one `OcrBlock` per recognised LINE.** Lines carry
+   their own bounding boxes, so the existing spatial row-grouping keeps
+   working — it just now operates on real rows.
+2. **`parser.dart` can split a single merged run.** At line granularity a
+   table row arrives as ONE line, `"1 C63 MAIN INCOMER"`. Added
+   `splitMergedRow()`, which peels off a leading position label, then takes
+   a rating code (keeping `"C 32"` whole) or the first token as the
+   component, and reports the rest as noise. Without this, fix (1) alone
+   would still have failed.
+
+Fix (1) without (2) fails; (2) without (1) never sees real rows. Both landed
+together.
+
+### JSON structured output (the mentor's other concrete suggestion)
+
+`buildReportJson()` in `lib/io/report.dart` emits a
+`parity.verification.v1` document — timestamp, summary, match flag, counts
+per discrepancy type, full expected/observed item lists with per-item
+confidence and an explicit `unread` flag, and every discrepancy typed with
+its expected/found values. Written alongside the `.txt` report on every
+export. Pure and unit-tested, no I/O, no platform mocks.
+
+This is genuinely useful beyond satisfying a suggestion: it makes the
+extraction itself inspectable — an evaluator can see the exact structured
+data the comparison ran on instead of taking the verdict on trust.
+
+### On "train the model" / Gemma — the honest position
+
+- **ML Kit's text recogniser cannot be trained or fine-tuned.** Google ships
+  it as a frozen on-device model with no training hook in the API. There is
+  no dataset to point at. Saying "we trained it" would be false.
+- **Training a custom OCR model** needs thousands of labelled images, GPU
+  training time, and TFLite conversion — impossible in the remaining window,
+  and would almost certainly be *worse* than ML Kit, which is trained on
+  vastly more data than this team could label.
+- **Gemma is a language model, not an OCR engine.** Gemma 3n has vision, but
+  for pure character extraction it is slower and less accurate than a
+  purpose-built OCR model, needs a ~1-4GB on-device download, and CLAUDE.md
+  section 11 forbids a model deciding what differs. It remains a legitimate
+  P2 option for *phrasing* an already-computed DiffResult, nothing more.
+- **The defensible answer:** "We profiled the failure. It wasn't recognition
+  accuracy — we were consuming ML Kit's block-level output and discarding
+  its line-level structure, so dense tables collapsed into run-on text. We
+  fixed the extraction layer and it now parses a 20-row schedule completely."
+  That is better engineering than swapping in a bigger model, and it is true.
+
+### Dense datasets added
+
+`demo_assets/generate_dense_datasets.ps1` produces four sheets that are
+deliberately the hard case:
+- `dense_spec_hospital.png` — 20-circuit ward-block board (C63 main down to
+  C6 emergency lighting), plus `dense_assembly_hospital_tampered.png`
+  (position 3 downrated, 8 removed, 21 added).
+- `dense_spec_school.png` — 12-item IT inventory with hyphenated part codes
+  and no breaker ratings at all, plus `dense_assembly_school_tampered.png`.
+
+`lib/main.dart`'s "Run Demo Sample" now points at the **dense hospital**
+scenario. Demoing the easy case is what let this bug hide.
+
+### Verification
+
+`flutter analyze` — 0 issues. `flutter test` — **96/96 passing** (77 previous
++ 19 new). New coverage in `test/dense_document_test.dart` (16 tests): all 20
+hospital rows parse with none lost, positions read 1-20 including two-digit
+ones, no description text ever leaks into a rating, descriptions reported as
+noise, tamper diff exact; plus the 12-row school inventory with hyphenated
+codes; plus `splitMergedRow()` unit behaviour including OCR separators
+(`3:` `4)` `5.` `6 -`), spaced ratings, and correctly refusing to read
+`"6000 3"` (breaking capacity) as a position.
+
+### Still outstanding
+
+- On-device confirmation of the dense scenario (build was in flight at time
+  of writing).
+- Release APK permission verification, NFR1/NFR2/NFR3 formal measurement,
+  and a truly physical (not laptop-screen) capture remain open.

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -19,8 +20,11 @@ class ReportResult {
   /// True when the full report was written to disk.
   final bool fileSaved;
 
-  /// Where the file was written, when [fileSaved] is true.
+  /// Where the text report was written, when [fileSaved] is true.
   final String? filePath;
+
+  /// Where the machine-readable JSON record was written, when it succeeded.
+  final String? jsonPath;
 
   /// What went wrong, when [fileSaved] is false.
   final String? fileError;
@@ -29,6 +33,7 @@ class ReportResult {
     required this.summary,
     required this.fileSaved,
     this.filePath,
+    this.jsonPath,
     this.fileError,
   });
 }
@@ -89,6 +94,59 @@ String buildReportText({
   return buffer.toString();
 }
 
+/// Builds the same verification result as a structured JSON document.
+///
+/// Two reasons this exists alongside the text report. First, a machine-
+/// readable record is what actually integrates with anything downstream — a
+/// maintenance system, a spreadsheet, an audit trail — where the prose
+/// report is only good for a human to read. Second, it makes the extraction
+/// itself inspectable: an evaluator can see the exact structured data the
+/// comparison ran on, rather than taking the verdict on trust.
+///
+/// Pure, like [buildReportText] — no I/O, unit-testable without mocks.
+String buildReportJson({
+  required List<SpecItem> expected,
+  required List<SpecItem> observed,
+  required DiffResult result,
+  required DateTime generatedAt,
+}) {
+  Map<String, dynamic> itemJson(SpecItem item) => {
+    'position': item.position,
+    'component': item.component,
+    'unread': item.component.trim().isEmpty,
+    'confidence': double.parse(item.confidence.toStringAsFixed(3)),
+  };
+
+  final document = {
+    'schema': 'parity.verification.v1',
+    'generatedAt': generatedAt.toIso8601String(),
+    'summary': phraseWithRules(result),
+    'isMatch': result.isMatch,
+    'counts': {
+      'expected': expected.length,
+      'observed': observed.length,
+      'missing': result.missing.length,
+      'unexpected': result.unexpected.length,
+      'mismatched': result.mismatched.length,
+      'unread': result.unread.length,
+    },
+    'expected': expected.map(itemJson).toList(),
+    'observed': observed.map(itemJson).toList(),
+    'discrepancies': result.all
+        .map(
+          (d) => {
+            'type': d.type.name,
+            'position': d.position,
+            'expected': d.expected,
+            'found': d.found,
+          },
+        )
+        .toList(),
+  };
+
+  return const JsonEncoder.withIndent('  ').convert(document);
+}
+
 /// Writes the report to the app documents directory and the summary to the
 /// clipboard. The clipboard write always happens; the file write's actual
 /// success is reported truthfully in the result rather than assumed.
@@ -107,13 +165,28 @@ Future<ReportResult> generateReport({
   );
 
   String? savedPath;
+  String? jsonPath;
   String? fileError;
   try {
     final timestamp = now.toIso8601String().replaceAll(':', '-');
     final dir = await getApplicationDocumentsDirectory();
+
     final file = File('${dir.path}/parity_report_$timestamp.txt');
     await file.writeAsString(reportText);
     savedPath = file.path;
+
+    // Structured record written alongside the prose one, so the result is
+    // machine-readable and the extracted data is inspectable.
+    final json = File('${dir.path}/parity_report_$timestamp.json');
+    await json.writeAsString(
+      buildReportJson(
+        expected: expected,
+        observed: observed,
+        result: result,
+        generatedAt: now,
+      ),
+    );
+    jsonPath = json.path;
   } catch (e) {
     fileError = e.toString();
   }
@@ -125,6 +198,7 @@ Future<ReportResult> generateReport({
     summary: summary,
     fileSaved: savedPath != null,
     filePath: savedPath,
+    jsonPath: jsonPath,
     fileError: fileError,
   );
 }

@@ -41,3 +41,9 @@ flutter:
     - demo_assets/demo_spec_mcb_real.png
     - demo_assets/demo_assembly_mcb_real_match.png
     - demo_assets/demo_assembly_mcb_real_tampered.png
+    # Dense datasets — the hard case that exposed the block-vs-line OCR bug.
+    - demo_assets/dense_spec_hospital.png
+    - demo_assets/dense_assembly_hospital_tampered.png
+    - demo_assets/dense_spec_school.png
+    - demo_assets/dense_assembly_school_tampered.png
+    - demo_assets/demo_spec_hospital_db.png
