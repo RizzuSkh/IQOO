@@ -1,0 +1,11 @@
+{
+  "hospital_board": {
+    "spec": "case_05_db_hospital_match.json",
+    "tampered_observation": "case_06_db_hospital_tamper.json",
+    "image": "db_hospital.jpg"
+  },
+  "home_board": {
+    "spec": "case_07_db_home_match.json",
+    "image": "db_home.jpg"
+  }
+}
