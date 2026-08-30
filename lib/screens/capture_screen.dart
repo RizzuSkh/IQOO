@@ -53,6 +53,28 @@ class CaptureScreen extends StatefulWidget {
 
 enum _Stage { idle, cropping, processing, done }
 
+/// How well OCR did on the last capture, driving which state the operator
+/// sees. Ordered worst to best so a plain int comparison would also work,
+/// but named for clarity at call sites.
+enum _CaptureIssue {
+  /// ML Kit found zero text anywhere in the photo — the wrong subject
+  /// entirely (a random photo, a blank wall, an out-of-focus blur), not
+  /// something crop or manual entry can fix. Retake is the only real answer.
+  notRecognized,
+
+  /// Text was found, but nothing looked like a position label — most likely
+  /// the wrong region was cropped, or the sheet isn't in the expected
+  /// position/component layout.
+  noPositionMatch,
+
+  /// Some rows parsed, but a few lines were left over. Not a failure — just
+  /// worth a glance before moving on.
+  partial,
+
+  /// Every line paired cleanly. Nothing to show the operator.
+  clean,
+}
+
 class _CaptureScreenState extends State<CaptureScreen> {
   final ImagePicker _picker = ImagePicker();
   final OcrReader _ocrReader = OcrReader();
@@ -68,6 +90,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
   ParseResult _parseResult = const ParseResult(items: [], unparsedRows: []);
   int _blocksRead = 0;
   String _error = '';
+  _CaptureIssue _issue = _CaptureIssue.clean;
   bool _loadingAsset = false;
 
   @override
@@ -94,6 +117,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
     setState(() {
       _loadingAsset = true;
       _error = '';
+      _issue = _CaptureIssue.clean;
     });
     try {
       final bytes = await rootBundle.load(assetPath);
@@ -145,12 +169,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
         _vInset = 0.0;
         _stage = _Stage.cropping;
         _error = '';
+        _issue = _CaptureIssue.clean;
         _parseResult = const ParseResult(items: [], unparsedRows: []);
       });
     } catch (e) {
       setState(() {
         _stage = _Stage.idle;
         _error = 'Camera failed: $e';
+        _issue = _CaptureIssue.clean;
       });
     }
   }
@@ -162,6 +188,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
     setState(() {
       _stage = _Stage.processing;
       _error = '';
+      _issue = _CaptureIssue.clean;
     });
 
     try {
@@ -184,43 +211,56 @@ class _CaptureScreenState extends State<CaptureScreen> {
       final parseResult = parseBlocks(blocks);
 
       if (!mounted) return;
+      final issue = _classify(blocks.length, parseResult);
       setState(() {
         _parseResult = parseResult;
         _blocksRead = blocks.length;
         _stage = _Stage.done;
-        _error = _diagnose(blocks.length, parseResult);
+        _issue = issue;
+        _error = _diagnose(issue, blocks.length, parseResult);
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _stage = _Stage.cropping;
+        _issue = _CaptureIssue.clean;
         _error = 'OCR failed: $e';
       });
     }
   }
 
+  /// Grades this capture from worst to best, driving which state the
+  /// operator sees. See [_CaptureIssue] for what each level means.
+  _CaptureIssue _classify(int blocksRead, ParseResult result) {
+    if (blocksRead == 0) return _CaptureIssue.notRecognized;
+    if (result.items.isEmpty) return _CaptureIssue.noPositionMatch;
+    if (result.unparsedRows.isNotEmpty) return _CaptureIssue.partial;
+    return _CaptureIssue.clean;
+  }
+
   /// Explains what OCR actually did and what to do next, rather than a
   /// generic "not found" message. Returns '' when the capture is clean.
-  String _diagnose(int blocksRead, ParseResult result) {
-    if (blocksRead == 0) {
-      return 'No text was detected in this photo at all. Check focus and '
-          'lighting, make sure the label sheet fills the frame, then retake.';
+  String _diagnose(_CaptureIssue issue, int blocksRead, ParseResult result) {
+    switch (issue) {
+      case _CaptureIssue.notRecognized:
+        return "This photo doesn't contain any readable text — it may be "
+            'the wrong subject, out of focus, or too dark. Point the camera '
+            'at the printed sheet or labelled assembly and retake.';
+      case _CaptureIssue.noPositionMatch:
+        final sample = result.unparsedRows.isNotEmpty
+            ? ' First line read: "${result.unparsedRows.first}".'
+            : '';
+        return 'Found $blocksRead block(s) of text, but none started with a '
+            'position label like "1" or "P1".$sample This usually means the '
+            'crop missed the label column, or this isn\'t the right sheet. '
+            'Retake and crop tighter, or add rows by hand on the next screen.';
+      case _CaptureIssue.partial:
+        return 'Parsed ${result.items.length} row(s). ${result.unparsedRows.length} '
+            'more line(s) did not match a position and are listed on the next '
+            "screen — add them manually if they're real rows.";
+      case _CaptureIssue.clean:
+        return '';
     }
-    if (result.items.isEmpty) {
-      final sample = result.unparsedRows.isNotEmpty
-          ? ' First line read: "${result.unparsedRows.first}".'
-          : '';
-      return 'Found $blocksRead block(s) of text, but none started with a '
-          'position label like "1" or "P1".$sample You can still tap Next '
-          'and add rows by hand on the next screen, or Retake and crop '
-          'tighter around just the position and component columns.';
-    }
-    if (result.unparsedRows.isNotEmpty) {
-      return 'Parsed ${result.items.length} row(s). ${result.unparsedRows.length} '
-          'more line(s) did not match a position and are listed on the next '
-          "screen — add them manually if they're real rows.";
-    }
-    return '';
   }
 
   void _retake() {
@@ -228,6 +268,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
       _imageFile = null;
       _stage = _Stage.idle;
       _error = '';
+      _issue = _CaptureIssue.clean;
       _parseResult = const ParseResult(items: [], unparsedRows: []);
     });
     // Demo-sample screens have no camera to fall back to — reload the same
@@ -328,25 +369,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
             ),
           ),
           Expanded(child: _body(accent)),
-          if (_error.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.amber.shade100,
-              width: double.infinity,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.info_outline, size: 18, color: Colors.brown),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _error,
-                      style: const TextStyle(color: Colors.brown, fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          if (_error.isNotEmpty) _issueBanner(),
           Padding(
             padding: const EdgeInsets.all(16),
             child: _actions(accent, isSpec),
@@ -354,6 +377,117 @@ class _CaptureScreenState extends State<CaptureScreen> {
         ],
       ),
     );
+  }
+
+  /// One-line summary shown over the photo once OCR finishes.
+  String _statusStripText() {
+    if (_blocksRead == 0) return 'No text detected in this photo';
+    final noise = _parseResult.ignoredNoise.isEmpty
+        ? ''
+        : ', ${_parseResult.ignoredNoise.length} ignored as noise';
+    return '$_blocksRead text block(s) read -> '
+        '${_parseResult.items.length} row(s) parsed$noise';
+  }
+
+  /// Shows what happened with a visual weight matching how serious it is.
+  /// [_CaptureIssue.notRecognized] gets a heading and a full card, not a
+  /// footnote — that state means "this isn't the right photo at all," and it
+  /// needs to be unmistakable, not blended in with routine informational
+  /// notes about a mostly-successful capture.
+  Widget _issueBanner() {
+    switch (_issue) {
+      case _CaptureIssue.notRecognized:
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          color: Colors.red.shade50,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.image_not_supported_outlined,
+                color: Colors.red.shade700,
+                size: 26,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Image not recognised',
+                      style: TextStyle(
+                        color: Colors.red.shade900,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _error,
+                      style: TextStyle(
+                        color: Colors.red.shade900,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      case _CaptureIssue.noPositionMatch:
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          color: Colors.orange.shade50,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 20,
+                color: Colors.orange.shade800,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _error,
+                  style: TextStyle(color: Colors.orange.shade900, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        );
+      case _CaptureIssue.partial:
+        return Container(
+          padding: const EdgeInsets.all(12),
+          color: Colors.blueGrey.shade50,
+          width: double.infinity,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline,
+                size: 18,
+                color: Colors.blueGrey.shade600,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _error,
+                  style: TextStyle(
+                    color: Colors.blueGrey.shade700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      case _CaptureIssue.clean:
+        return const SizedBox.shrink();
+    }
   }
 
   Widget _body(MaterialColor accent) {
@@ -421,18 +555,18 @@ class _CaptureScreenState extends State<CaptureScreen> {
                 children: [
                   Image.file(_imageFile!, fit: BoxFit.fill),
                   if (_stage == _Stage.cropping) _cropMask(),
-                  if (_stage == _Stage.done && _parseResult.items.isNotEmpty)
+                  if (_stage == _Stage.done)
                     Positioned(
                       bottom: 0,
                       left: 0,
                       right: 0,
                       child: Container(
                         padding: const EdgeInsets.all(8),
-                        color: Colors.black.withValues(alpha: 0.7),
+                        color: _issue == _CaptureIssue.notRecognized
+                            ? Colors.red.shade900.withValues(alpha: 0.85)
+                            : Colors.black.withValues(alpha: 0.7),
                         child: Text(
-                          '$_blocksRead text block(s) read -> '
-                          '${_parseResult.items.length} row(s) parsed'
-                          '${_parseResult.ignoredNoise.isEmpty ? '' : ', ${_parseResult.ignoredNoise.length} ignored as noise'}',
+                          _statusStripText(),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -645,19 +779,33 @@ class _CaptureScreenState extends State<CaptureScreen> {
       );
     }
 
-    // _Stage.done
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton.icon(
+    // _Stage.done. When nothing usable was read, steer the operator toward
+    // fixing the capture: Retake becomes the filled, primary action and
+    // proceeding becomes the quiet option, rather than treating a failed
+    // capture the same as a clean one.
+    final blocked = _issue == _CaptureIssue.notRecognized;
+    final retakeButton = blocked
+        ? ElevatedButton.icon(
             onPressed: _retake,
             icon: const Icon(Icons.replay),
             label: const Text('Retake'),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+          )
+        : OutlinedButton.icon(
+            onPressed: _retake,
+            icon: const Icon(Icons.replay),
+            label: const Text('Retake'),
+          );
+    final proceedButton = blocked
+        ? OutlinedButton.icon(
+            onPressed: _proceed,
+            icon: const Icon(Icons.arrow_forward),
+            label: Text(isSpec ? 'Skip anyway' : 'Skip & compare'),
+          )
+        : ElevatedButton.icon(
             onPressed: _proceed,
             icon: const Icon(Icons.arrow_forward),
             label: Text(isSpec ? 'Next' : 'Compare'),
@@ -665,8 +813,13 @@ class _CaptureScreenState extends State<CaptureScreen> {
               backgroundColor: Colors.purple,
               foregroundColor: Colors.white,
             ),
-          ),
-        ),
+          );
+
+    return Row(
+      children: [
+        Expanded(child: retakeButton),
+        const SizedBox(width: 16),
+        Expanded(child: proceedButton),
       ],
     );
   }

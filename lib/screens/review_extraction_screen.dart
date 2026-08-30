@@ -131,7 +131,7 @@ class _ReviewExtractionScreenState extends State<ReviewExtractionScreen> {
             TextField(
               controller: positionController,
               decoration: const InputDecoration(
-                labelText: 'Position (e.g. P1)',
+                labelText: 'Position (e.g. 1 or P1)',
                 border: OutlineInputBorder(),
               ),
               textCapitalization: TextCapitalization.characters,
