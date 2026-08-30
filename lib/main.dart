@@ -76,7 +76,7 @@ class ParityApp extends StatelessWidget {
 /// dense table collapsed into a couple of run-on strings and nothing
 /// parsed). Demoing the hard case is the only way the fix stays honest.
 /// Other bundled scenarios remain available — swap these two constants.
-const String _demoSpecAsset = 'demo_assets/db_hospital.jpg';
+const String _demoSpecAsset = 'demo_assets/db_hosp_spec.jpg';
 const String _demoAssemblyTamperedAsset = 'demo_assets/db_hospital.jpg';
 
 class HomeScreen extends StatefulWidget {

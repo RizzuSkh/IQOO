@@ -60,8 +60,10 @@ final RegExp _mergedRowPattern = RegExp(r'^(P?\d{1,3})[\s:.\)\-]+(.+)$');
 /// A rating code appearing at the START of the remainder of a merged row,
 /// so "1 C 32 MAIN INCOMER" keeps "C 32" together instead of splitting the
 /// rating's own internal space into component "C" and noise "32".
-final RegExp _leadingRatingPattern =
-    RegExp(r'^([BCDKZ]\s?\d{1,3}A?)(?:\s|$)');
+final RegExp _leadingRatingPattern = RegExp(
+  r'^([BCDKZ]\s?\d{1,3}A?|\d{1,3}\s?A(?:MP)?)(?:\s+(DP|SP|TP|TPN|4P|2P|1P))?(?:\s+(RCBO|MCB|RCCB|RCD|ELCB|ISOLATOR))?(?:\s|$)',
+  caseSensitive: false,
+);
 
 /// The outcome of parsing one photograph's blocks.
 ///
@@ -462,16 +464,11 @@ String _cleanComponentValue(String rawText) {
   final trimmed = _flatten(rawText);
   if (trimmed.isEmpty) return '';
 
-  // 1. Try Breaker curve pattern (e.g. "C16", "B16", "C32")
-  final curveMatch = _breakerCurvePattern.firstMatch(trimmed);
-  if (curveMatch != null) {
-    return curveMatch.group(0)!.toUpperCase();
-  }
-
-  // 2. Try explicit Ampere pattern (e.g. "16A", "16 A", "10A", "32A")
-  final ampMatch = _amperePattern.firstMatch(trimmed);
-  if (ampMatch != null) {
-    return ampMatch.group(0)!.toUpperCase().replaceAll(' ', '');
+  final rating = _leadingRatingPattern.firstMatch(trimmed.toUpperCase());
+  if (rating != null) {
+      final baseRating = rating.group(1)!;
+      final normalisedBase = baseRating.replaceAll(' ', '');
+      return rating.group(0)!.trim().replaceFirst(baseRating, normalisedBase);
   }
 
   // 3. Try IC / electronic part pattern (e.g. "NE555", "7805", "LM358")
@@ -551,8 +548,10 @@ MergedRow? splitMergedRow(String text) {
 
   final rating = _leadingRatingPattern.firstMatch(rest.toUpperCase());
   if (rating != null) {
-    final component = rating.group(1)!.replaceAll(' ', '');
-    final remainder = rest.substring(rating.group(1)!.length).trim();
+    final baseRating = rating.group(1)!;
+    final normalisedBase = baseRating.replaceAll(' ', '');
+    final component = rating.group(0)!.trim().replaceFirst(baseRating, normalisedBase);
+    final remainder = rest.substring(rating.end).trim();
     return MergedRow(
       position: position,
       component: component,
